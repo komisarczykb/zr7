@@ -11,20 +11,35 @@
 	<groupId>me.bartoszkomisarczyk</groupId>
 	<artifactId>zr7</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
-	<url/>
+	<name>Zadanie Rekrutacyjne 7</name>
+	<description>REST service for managing discount coupons:
+		creation and usage registration with case-insensitive codes,
+		per-country restriction via IP geolocation,
+		per-user single-use enforcement,
+		and concurrency-safe usage limits.
+	</description>
+	<url>https://github.com/komisarczykb/zr7</url>
 	<licenses>
-		<license/>
+		<license>
+			<name>MIT License</name>
+			<url>https://opensource.org/licenses/MIT</url>
+			<distribution>repo</distribution>
+		</license>
 	</licenses>
 	<developers>
-		<developer/>
+		<developer>
+			<name>Bartosz Komisarczyk</name>
+			<email>komisarczykb@gmail.com</email>
+			<url>https://github.com/komisarczykb</url>
+			<roles>
+				<role>Developer</role>
+			</roles>
+		</developer>
 	</developers>
 	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
+		<connection>scm:git:git://github.com/komisarczykb/zr7.git</connection>
+		<developerConnection>scm:git:ssh://git@github.com/komisarczykb/zr7.git</developerConnection>
+		<url>https://github.com/komisarczykb/zr7</url>
 	</scm>
 	<properties>
 		<java.version>25</java.version>
