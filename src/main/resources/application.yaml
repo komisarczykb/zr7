@@ -1,3 +1,22 @@
 spring:
   application:
     name: zr7
+  sql:
+    init:
+      mode: always
+  jpa:
+    hibernate:
+      ddl-auto: none # assumption - Postgres tables are non-modifiable; todo: replace with validate once entities are in place
+  datasource:
+    url: jdbc:postgresql://localhost:5432/coupons
+    username: couponUser
+    password: couponPass
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always
