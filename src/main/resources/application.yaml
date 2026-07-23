@@ -8,9 +8,9 @@ spring:
     hibernate:
       ddl-auto: none # assumption - Postgres tables are non-modifiable; todo: replace with validate once entities are in place
   datasource:
-    url: jdbc:postgresql://localhost:5432/coupons
-    username: couponUser
-    password: couponPass
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/coupons}
+    username: ${DB_USERNAME:couponUser}
+    password: ${DB_PASSWORD:couponPass}
 
 management:
   endpoints:
