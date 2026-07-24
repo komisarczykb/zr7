@@ -6,13 +6,26 @@
 - **Spring Boot** - 4.1.0
 - **Database** - PostgreSQL 18.4 (`18.4-alpine` image)
 - **Build tool** - Maven 3.9.16 (via Maven Wrapper)
+- **Database migrations** - Flyway (via `spring-boot-starter-flyway`)
 
-## something
+## Timezone handling
+
 - Application and db enforces the same timezone usage by:
-  - jvm flag: `-Duser.timezone=UTC`
-  - hibernate: `spring.jpa.properties.hibernate.jdbc.time_zone=UTC`
-  - postgres container command: `-c timezone=UTC -c log_timezone=UTC`
-  - postgres env settings: `TZ: UTC` and `PGTZ: UTC`
+    - jvm flag: `-Duser.timezone=UTC`
+    - hibernate: `spring.jpa.properties.hibernate.jdbc.time_zone=UTC`
+    - postgres container command: `-c timezone=UTC -c log_timezone=UTC`
+    - postgres env settings: `TZ: UTC` and `PGTZ: UTC`
+
+## Data model
+
+Two tables, defined by the Flyway migrations:
+
+- **coupon** - the coupon definition. `id` is an internal serial PK that never leaves the DB (coupons are activated by
+  `code`, which is unique case-insensitively via a `UPPER(code)` index). `current_usage <= max_usage` and
+  `max_usage > 0`
+  are enforced by CHECK constraints; `country_code` is constrained to exactly two uppercase letters.
+- **coupon_usage** - one row per redemption. The `(coupon_id, user_id)` UNIQUE constraint enforces single-use per
+  customer; `used_at` is a `TIMESTAMPTZ`.
 
 ## Decisions
 
@@ -42,6 +55,16 @@
    identified upstream — either as a logged-in account or, for guest checkout, via one-time customer details. The
    request carries that identity as an opaque `customerRef`, which this service does not verify and uses only to enforce
    the one-redemption- per-customer rule.
+9. **Flyway-managed schema with least-privilege DB users** - Schema changes are versioned and applied by Flyway using a
+   dedicated DDL-capable user (`coupon_db_owner`), while the runtime application connects as `coupon_user`, which holds
+   only the DML grants it needs (`SELECT/INSERT/UPDATE` on `coupon`, `SELECT/INSERT` on `coupon_usage`, plus sequence
+   usage). Hibernate's `ddl-auto` is `none`, so the app never alters the schema at runtime - schema evolution happens
+   only
+   through reviewed, ordered migrations. This separates who can change the structure from who can touch the data, and
+   keeps
+   the runtime surface minimal
+    - My general assumption is that DB schema is managed by other team/user than the one used by app, therefore
+      separation of permissions;
 
 ## Discarded ideas
 
