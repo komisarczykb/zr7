@@ -7,6 +7,13 @@
 - **Database** - PostgreSQL 18.4 (`18.4-alpine` image)
 - **Build tool** - Maven 3.9.16 (via Maven Wrapper)
 
+## something
+- Application and db enforces the same timezone usage by:
+  - jvm flag: `-Duser.timezone=UTC`
+  - hibernate: `spring.jpa.properties.hibernate.jdbc.time_zone=UTC`
+  - postgres container command: `-c timezone=UTC -c log_timezone=UTC`
+  - postgres env settings: `TZ: UTC` and `PGTZ: UTC`
+
 ## Decisions
 
 1. **GraalVM Native Image** - Considered for cloud cost savings, but deferred to a *nice-to-have* priority in favor of
