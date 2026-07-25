@@ -3,16 +3,22 @@ spring:
     name: zr7
   sql:
     init:
-      mode: always
+      mode: never
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: none # assumption - Postgres tables are non-modifiable
       # (managed by external team, our user has no permissions to modify tables);
       # todo: replace with validate once entities are in place
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/coupons}
-    username: ${DB_USERNAME:couponUser}
+    username: ${DB_USERNAME:coupon_user}
     password: ${DB_PASSWORD:couponPass}
+  # from assumption that our user has no permissions to use DDL, we need an separate user to do such things
+  flyway:
+    enabled: true
+    user: ${FLYWAY_USER:coupon_db_owner}
+    password: ${FLYWAY_PASSWORD:db_owner}
 
 management:
   endpoints:
@@ -22,3 +28,9 @@ management:
   endpoint:
     health:
       show-details: always
+
+logging:
+  level:
+    org.flywaydb: info
+    org.springframework.boot.autoconfigure.flyway: info
+debug: false

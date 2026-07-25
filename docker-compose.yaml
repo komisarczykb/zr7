@@ -1,15 +1,19 @@
 services:
-
   postgres:
     image: postgres:18.4-alpine
+    command: -c timezone=UTC -c log_timezone=UTC
     environment:
       POSTGRES_DB: coupons
-      POSTGRES_USER: couponUser
-      POSTGRES_PASSWORD: couponPass
+      POSTGRES_USER: my_su
+      POSTGRES_PASSWORD: my_su_pass
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U couponUser -d coupons"]
+      test: ["CMD-SHELL", "pg_isready -U coupon_user -d coupons"]
       interval: 2s
       timeout: 3s
       retries: 10
