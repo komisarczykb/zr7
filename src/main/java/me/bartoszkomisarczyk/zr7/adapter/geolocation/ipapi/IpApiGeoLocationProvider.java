@@ -38,7 +38,7 @@ import org.springframework.web.client.RestClientException;
  * If you constantly go over the limit your IP address will be banned for 1 hour.
  * */
 @Component
-@ConditionalOnProperty(name = "geolocation.provider", havingValue = "ipapi")
+@ConditionalOnProperty(name = "geolocation.provider", havingValue = "ipapi", matchIfMissing = true)
 public class IpApiGeoLocationProvider implements GeoLocationProvider {
 
     private final RestClient restClient;

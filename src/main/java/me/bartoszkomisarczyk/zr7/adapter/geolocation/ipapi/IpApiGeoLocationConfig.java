@@ -7,8 +7,9 @@ import org.springframework.web.client.RestClient;
 
 @Configuration
 public class IpApiGeoLocationConfig {
+
     @Bean
-    @ConditionalOnProperty(name = "geolocation.provider", havingValue = "ipapi")
+    @ConditionalOnProperty(name = "geolocation.provider", havingValue = "ipapi", matchIfMissing = true)
     public RestClient ipApiRestClient(RestClient.Builder builder) {
         return builder.baseUrl("http://ip-api.com/").build();
     }

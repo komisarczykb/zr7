@@ -27,6 +27,22 @@ Two tables, defined by the Flyway migrations:
 - **coupon_usage** - one row per redemption. The `(coupon_id, user_id)` UNIQUE constraint enforces single-use per
   customer; `used_at` is a `TIMESTAMPTZ`.
 
+## Geolocation IP verification
+
+Country restriction is resolved through a geolocation port.
+The implementation is kept minimal as I don't consider it being most important part of the project and I'm running out
+of time :)
+
+- **Port** - `domain/geolocation/GeoLocationProvider` returns a `GeoLocationResult` (ISO-3166-1 alpha-2 country code as
+  String) or throws `GeoLocationException`. Main coupon service depends on the port only.
+- **Adapter** - `adapter/geolocation/ipapi` implements the port against the free [ip-api.com](https://ip-api.com/) JSON
+  endpoint.
+- **Provider** - `geolocation.provider` selects the active adapter (`ipapi` in this case). Both the adapter and its
+  `RestClient` bean are gated by `@ConditionalOnProperty` but also set as `matchIfMissing = true` so the context boots
+  cleanly when the property is absent;
+- **HTTP client timeouts** - `connect-timeout: 3s`, `read-timeout: 5s`; a hanging upstream
+  fails fast instead of holding a request thread.
+
 ## Testing
 
 Run with `./mvnw test`.
@@ -83,6 +99,10 @@ permissions. All test classes share a single container and application context.
     - `db/init/01_roles.sql` lives outside the migrations because Flyway cannot create the login it connects as — the
       `coupon_db_owner` role must already exist before Flyway runs. In production this is the external team's bootstrap;
       locally and in tests it is mounted into the container's `/docker-entrypoint-initdb.d`.
+10. **Geolocation via the free ip-api.com endpoint** - chosen for the prototype because it needs no API key. The free
+    tier is limited to **45 requests/min per IP** ([docs](https://ip-api.com/docs/api:json)), which is incompatible with
+    the ~1300 req/s mentioned in [decision #6](#decisions). In 'real-world' scenario this adapter can be implemented
+    using proper service, behind the same port so the domain is untouched.
 
 ## Discarded ideas
 
