@@ -27,6 +27,21 @@ Two tables, defined by the Flyway migrations:
 - **coupon_usage** - one row per redemption. The `(coupon_id, user_id)` UNIQUE constraint enforces single-use per
   customer; `used_at` is a `TIMESTAMPTZ`.
 
+## Testing
+
+Run with `./mvnw test`.
+
+Integration tests run against PostgreSQL via Testcontainers that reproduces the expected db config;
+`db/init/01_roles.sql` creates the DDL-capable owner and the DML-only user used by the app (based on assmuption that
+external team manages db). Then Flyway applies `src/main/resources/db/migration` scripts and sets up tables and grants
+permissions. All test classes share a single container and application context.
+
+- **`AppContextIntegrationTest`** — the application boots and Flyway applies every migration against a fresh database.
+- **`DbUserPermissionsTest`** — connects as `coupon_user` and asserts the least-privilege model: the granted DML is
+  allowed, while DDL and destructive operations are denied.
+- **`DbSchemaConstraintsTest`** — asserts the (expected) schema enforces the business rules for our user: the CHECK
+  constraints, the case-insensitive uniqueness, the single-use constraint, and the `coupon_usage` foreign key.
+
 ## Decisions
 
 1. **GraalVM Native Image** - Considered for cloud cost savings, but deferred to a *nice-to-have* priority in favor of
@@ -62,9 +77,12 @@ Two tables, defined by the Flyway migrations:
    only
    through reviewed, ordered migrations. This separates who can change the structure from who can touch the data, and
    keeps
-   the runtime surface minimal
+   the runtime surface minimal (verified by `DbUserPermissionsTest`)
     - My general assumption is that DB schema is managed by other team/user than the one used by app, therefore
       separation of permissions;
+    - `db/init/01_roles.sql` lives outside the migrations because Flyway cannot create the login it connects as — the
+      `coupon_db_owner` role must already exist before Flyway runs. In production this is the external team's bootstrap;
+      locally and in tests it is mounted into the container's `/docker-entrypoint-initdb.d`.
 
 ## Discarded ideas
 
