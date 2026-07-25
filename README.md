@@ -42,6 +42,11 @@ of time :)
   cleanly when the property is absent;
 - **HTTP client timeouts** - `connect-timeout: 3s`, `read-timeout: 5s`; a hanging upstream
   fails fast instead of holding a request thread.
+- **ip-api default provider** - chosen because of the ease of use, api allows to get a lot of information but i;ve
+  decided to limit the request with only 3 fields - status, message, countryCode. Few fields are language dependant, not
+  in our case at the moment of creating the application but `lang=en` parameter has been added to enforce English
+  language just in case. **HOWEVER, THE BIGGEST DOWNSIZE OF THIS PROVIDER IS 45REQUESTS/MINUTE LIMITATION FOR FREE TIER
+  WHICH WE USE**
 
 ## Testing
 

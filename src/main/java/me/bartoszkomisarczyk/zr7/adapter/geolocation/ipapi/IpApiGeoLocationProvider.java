@@ -68,7 +68,7 @@ public class IpApiGeoLocationProvider implements GeoLocationProvider {
             switch (response.message()) {
                 case "private range" -> errorMessage = "IP is within private range";
                 case "reserved range" -> errorMessage = "IP is within reserved range";
-                case "invalid query" -> errorMessage = "Invalid query";
+                case "invalid query" -> errorMessage = String.format("%s: %s", response.message(), response.query());
                 default -> errorMessage = response.message();
             }
             throw new GeoLocationException(errorMessage);
