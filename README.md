@@ -47,6 +47,9 @@ of time :)
   in our case at the moment of creating the application but `lang=en` parameter has been added to enforce English
   language just in case. **HOWEVER, THE BIGGEST DOWNSIZE OF THIS PROVIDER IS 45REQUESTS/MINUTE LIMITATION FOR FREE TIER
   WHICH WE USE**
+- **In-memory caching** - a `CachingGeoLocationProvider` decorator sits in front of the active provider. Repeated
+  `resolve(ip)` calls for the same IP are served from a Caffeine cache, which directly helps with the 45 req/min limit.
+  Tunable via `geolocation.cache.ttl` and `geolocation.cache.max-size`.
 
 ## Testing
 
@@ -62,6 +65,8 @@ permissions. All test classes share a single container and application context.
   allowed, while DDL and destructive operations are denied.
 - **`DbSchemaConstraintsTest`** — asserts the (expected) schema enforces the business rules for our user: the CHECK
   constraints, the case-insensitive uniqueness, the single-use constraint, and the `coupon_usage` foreign key.
+- **`GeoLocationCachingIntegrationTest`** — asserts a second `resolve()` for the same IP is served from cache while the
+  upstream is hit once.
 
 ## Decisions
 
@@ -108,6 +113,9 @@ permissions. All test classes share a single container and application context.
     tier is limited to **45 requests/min per IP** ([docs](https://ip-api.com/docs/api:json)), which is incompatible with
     the ~1300 req/s mentioned in [decision #6](#decisions). In 'real-world' scenario this adapter can be implemented
     using proper service, behind the same port so the domain is untouched.
+11. **Caffeine cache + decorator in front of the port** - cut redundant *SUCCESSFUL* ip-api calls (the free tier's 45
+    req/min, see [#10](#decisions)) without the domain knowing anything about caching: the decorator implements the same
+    port and is`@Primary`.
 
 ## Discarded ideas
 
