@@ -19,6 +19,11 @@ spring:
     enabled: true
     user: ${FLYWAY_USER:coupon_db_owner}
     password: ${FLYWAY_PASSWORD:db_owner}
+  #timeouts for RestClient used in geolocation
+  http:
+    client:
+      connect-timeout: 3s
+      read-timeout: 5s
 
 management:
   endpoints:
@@ -28,6 +33,9 @@ management:
   endpoint:
     health:
       show-details: always
+
+geolocation:
+  provider: ipapi
 
 logging:
   level:
