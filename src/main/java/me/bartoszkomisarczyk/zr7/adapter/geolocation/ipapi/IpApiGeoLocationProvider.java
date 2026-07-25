@@ -4,6 +4,7 @@ import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationException;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationProvider;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationRateLimitedException;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationResult;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
@@ -40,6 +41,7 @@ import org.springframework.web.client.RestClientException;
  * If you constantly go over the limit your IP address will be banned for 1 hour.
  * */
 @Component
+@Qualifier("delegateGeoLocationProvider")
 @ConditionalOnProperty(name = "geolocation.provider", havingValue = "ipapi", matchIfMissing = true)
 public class IpApiGeoLocationProvider implements GeoLocationProvider {
 

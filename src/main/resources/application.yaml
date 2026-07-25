@@ -36,6 +36,9 @@ management:
 
 geolocation:
   provider: ipapi
+  cache:
+    ttl: 10m
+    max-size: 10000
 
 logging:
   level:
