@@ -2,9 +2,11 @@ package me.bartoszkomisarczyk.zr7.adapter.geolocation.ipapi;
 
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationException;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationProvider;
+import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationRateLimitedException;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationResult;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -55,6 +57,12 @@ public class IpApiGeoLocationProvider implements GeoLocationProvider {
                     .uri("json/{ip}?fields=49154&lang=en")
                     .retrieve()
                     .body(IpApiResponse.class);
+        } catch (HttpClientErrorException e) {
+            // ip-api throttles with HTTP 429 (45 req/min free tier).
+            if (e.getStatusCode().value() == 429) {
+                throw new GeoLocationRateLimitedException("Geolocation provider rate limit exceeded", e);
+            }
+            throw new GeoLocationException(e.getMessage(), e);
         } catch (RestClientException e) {
             throw new GeoLocationException(e.getMessage(), e);
         }
