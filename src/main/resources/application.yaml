@@ -40,6 +40,14 @@ geolocation:
     ttl: 10m
     max-size: 10000
 
+coupon:
+  exhaustion-cache:
+    ttl: 30m
+    max-size: 10000
+  lookup-cache:
+    ttl: 30m
+    max-size: 10000
+
 logging:
   level:
     org.flywaydb: info

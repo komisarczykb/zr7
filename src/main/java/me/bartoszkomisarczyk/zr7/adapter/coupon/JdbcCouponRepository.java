@@ -3,22 +3,30 @@ package me.bartoszkomisarczyk.zr7.adapter.coupon;
 import me.bartoszkomisarczyk.zr7.domain.coupon.Coupon;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponLookup;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponRepository;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import java.sql.Timestamp;
 import java.util.Optional;
 
 @Repository
+@Qualifier("delegateCouponRepository")
 public class JdbcCouponRepository implements CouponRepository {
 
     private static final String LOOKUP_BY_CODE = """
             SELECT id, country_code FROM coupon WHERE UPPER(code) = UPPER(:code)
             """;
 
+    private static final String FULL_LOOKUP_BY_CODE = """
+            SELECT id, code, creation_date, max_usage, current_usage, country_code
+            FROM coupon WHERE UPPER(code) = UPPER(:code)
+            """;
+
     private static final String INSERT_COUPON = """
             INSERT INTO coupon (code, max_usage, country_code)
             VALUES (:code, :maxUsage, :countryCode)
-            RETURNING id, code, max_usage, current_usage, country_code
+            RETURNING id, code, creation_date, max_usage, current_usage, country_code
             """;
 
     private static final String INSERT_USAGE = """
@@ -48,18 +56,32 @@ public class JdbcCouponRepository implements CouponRepository {
     }
 
     @Override
+    public Optional<Coupon> findFullByCode(String code) {
+        return jdbcClient.sql(FULL_LOOKUP_BY_CODE)
+                .param("code", code)
+                .query(JdbcCouponRepository::mapCoupon)
+                .optional();
+    }
+
+    @Override
     public Coupon insert(String code, int maxUsage, String countryCode) {
         return jdbcClient.sql(INSERT_COUPON)
                 .param("code", code)
                 .param("maxUsage", maxUsage)
                 .param("countryCode", countryCode)
-                .query((rs, rowNum) -> new Coupon(
-                        rs.getLong("id"),
-                        rs.getString("code"),
-                        rs.getInt("max_usage"),
-                        rs.getInt("current_usage"),
-                        rs.getString("country_code")))
+                .query(JdbcCouponRepository::mapCoupon)
                 .single();
+    }
+
+    private static Coupon mapCoupon(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        Timestamp creationDate = rs.getTimestamp("creation_date");
+        return new Coupon(
+                rs.getLong("id"),
+                rs.getString("code"),
+                creationDate.toInstant(),
+                rs.getInt("max_usage"),
+                rs.getInt("current_usage"),
+                rs.getString("country_code"));
     }
 
     @Override

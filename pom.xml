@@ -87,7 +87,6 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-restclient</artifactId>
-			<scope>test</scope>
 		</dependency>
 
 		<dependency>
@@ -165,6 +164,7 @@
 				<artifactId>maven-surefire-plugin</artifactId>
 				<configuration>
 					<argLine>-javaagent:${org.mockito:mockito-core:jar}</argLine>
+					<excludedGroups>load</excludedGroups>
 				</configuration>
 			</plugin>
 		</plugins>

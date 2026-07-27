@@ -6,7 +6,8 @@ public sealed interface CouponUsageResult
         CouponUsageResult.AlreadyUsed,
         CouponUsageResult.Exhausted,
         CouponUsageResult.NotFound,
-        CouponUsageResult.CountryNotAllowed {
+        CouponUsageResult.CountryNotAllowed,
+        CouponUsageResult.GeoLocationUnavailable {
 
     record Success() implements CouponUsageResult {
     }
@@ -21,5 +22,10 @@ public sealed interface CouponUsageResult
     }
 
     record CountryNotAllowed() implements CouponUsageResult {
+    }
+
+    // The geolocation provider could not be reached or is rate-limiting us — a policy
+    // decision could not be made, so this must not be reported as CountryNotAllowed.
+    record GeoLocationUnavailable(int retryAfterSeconds) implements CouponUsageResult {
     }
 }
