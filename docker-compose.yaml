@@ -17,3 +17,16 @@ services:
       interval: 2s
       timeout: 3s
       retries: 10
+
+  app:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/coupons
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"

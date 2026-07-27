@@ -1,4 +1,4 @@
-package me.bartoszkomisarczyk.zr7.web.coupon.dto;
+package me.bartoszkomisarczyk.zr7.adapter.in.web.coupon.dto;
 
 import me.bartoszkomisarczyk.zr7.domain.coupon.Coupon;
 

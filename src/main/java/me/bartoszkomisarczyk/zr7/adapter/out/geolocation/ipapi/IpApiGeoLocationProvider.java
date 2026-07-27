@@ -1,9 +1,12 @@
-package me.bartoszkomisarczyk.zr7.adapter.geolocation.ipapi;
+package me.bartoszkomisarczyk.zr7.adapter.out.geolocation.ipapi;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationException;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationProvider;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationRateLimitedException;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationResult;
+import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationUnresolvableException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -45,6 +48,9 @@ import org.springframework.web.client.RestClientException;
 @ConditionalOnProperty(name = "geolocation.provider", havingValue = "ipapi", matchIfMissing = true)
 public class IpApiGeoLocationProvider implements GeoLocationProvider {
 
+    /** Instance name configured under {@code resilience4j.circuitbreaker.instances} in application.yaml. */
+    static final String CIRCUIT_BREAKER_NAME = "ipapi";
+
     private final RestClient restClient;
 
     public IpApiGeoLocationProvider(RestClient ipApiRestClient) {
@@ -52,11 +58,12 @@ public class IpApiGeoLocationProvider implements GeoLocationProvider {
     }
 
     @Override
+    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "circuitOpen")
     public GeoLocationResult resolve(String ip) {
         IpApiResponse response;
         try {
             response = restClient.get()
-                    .uri("json/{ip}?fields=49154&lang=en")
+                    .uri("json/{ip}?fields=57346&lang=en", ip)
                     .retrieve()
                     .body(IpApiResponse.class);
         } catch (HttpClientErrorException e) {
@@ -81,10 +88,21 @@ public class IpApiGeoLocationProvider implements GeoLocationProvider {
                 case "invalid query" -> errorMessage = String.format("%s: %s", response.message(), response.query());
                 default -> errorMessage = response.message();
             }
-            throw new GeoLocationException(errorMessage);
+            // The provider is healthy - this IP simply has no country. Not a circuit-breaker failure.
+            throw new GeoLocationUnresolvableException(errorMessage);
         }
 
         return new GeoLocationResult(response.countryCode());
+    }
+
+    /**
+     * Invoked only when the circuit is open, so the caller sees the same {@link GeoLocationException}
+     * contract as any other provider failure instead of a resilience4j-specific exception. Every other
+     * throwable has no matching fallback signature and propagates unchanged.
+     */
+    @SuppressWarnings("unused") // referenced by name from @CircuitBreaker(fallbackMethod = ...)
+    private GeoLocationResult circuitOpen(String ip, CallNotPermittedException e) {
+        throw new GeoLocationException("Geolocation provider circuit is open", e);
     }
 
 }

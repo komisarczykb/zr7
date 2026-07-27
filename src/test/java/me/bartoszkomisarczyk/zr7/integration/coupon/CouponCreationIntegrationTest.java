@@ -1,7 +1,8 @@
-package me.bartoszkomisarczyk.zr7.integration;
+package me.bartoszkomisarczyk.zr7.integration.coupon;
 
-import me.bartoszkomisarczyk.zr7.web.coupon.dto.CouponResponse;
-import me.bartoszkomisarczyk.zr7.web.coupon.dto.CreateCouponRequest;
+import me.bartoszkomisarczyk.zr7.adapter.in.web.coupon.dto.CouponResponse;
+import me.bartoszkomisarczyk.zr7.adapter.in.web.coupon.dto.CreateCouponRequest;
+import me.bartoszkomisarczyk.zr7.integration.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;

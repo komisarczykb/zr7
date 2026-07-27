@@ -1,4 +1,4 @@
-package me.bartoszkomisarczyk.zr7.application.coupon;
+package me.bartoszkomisarczyk.zr7.domain.coupon;
 
 /**
  * Once a coupon is confirmed exhausted by the database, current_usage never decreases (no reset/limit-raise

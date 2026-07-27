@@ -1,4 +1,4 @@
-package me.bartoszkomisarczyk.zr7.adapter.geolocation.ipapi;
+package me.bartoszkomisarczyk.zr7.adapter.out.geolocation.ipapi;
 
 public record IpApiResponse(
         String status,

@@ -1,8 +1,9 @@
-package me.bartoszkomisarczyk.zr7.integration;
+package me.bartoszkomisarczyk.zr7.integration.coupon;
 
-import me.bartoszkomisarczyk.zr7.adapter.coupon.JdbcCouponRepository;
-import me.bartoszkomisarczyk.zr7.adapter.coupon.cache.CachingCouponRepository;
+import me.bartoszkomisarczyk.zr7.adapter.out.coupon.CachingCouponRepository;
+import me.bartoszkomisarczyk.zr7.adapter.out.coupon.JdbcCouponRepository;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponRepository;
+import me.bartoszkomisarczyk.zr7.integration.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;

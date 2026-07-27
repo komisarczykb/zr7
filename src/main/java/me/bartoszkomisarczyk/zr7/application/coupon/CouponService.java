@@ -2,6 +2,7 @@ package me.bartoszkomisarczyk.zr7.application.coupon;
 
 import me.bartoszkomisarczyk.zr7.domain.coupon.Coupon;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponCreationResult;
+import me.bartoszkomisarczyk.zr7.domain.coupon.CouponExhaustionCache;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponLookup;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponRepository;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponUsageResult;

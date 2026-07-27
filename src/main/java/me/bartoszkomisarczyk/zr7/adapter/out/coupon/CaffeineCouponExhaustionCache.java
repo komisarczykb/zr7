@@ -1,9 +1,9 @@
-package me.bartoszkomisarczyk.zr7.adapter.coupon.cache;
+package me.bartoszkomisarczyk.zr7.adapter.out.coupon;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import me.bartoszkomisarczyk.zr7.application.coupon.CouponExhaustionCache;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponCode;
+import me.bartoszkomisarczyk.zr7.domain.coupon.CouponExhaustionCache;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 

@@ -1,4 +1,4 @@
-package me.bartoszkomisarczyk.zr7.adapter.coupon;
+package me.bartoszkomisarczyk.zr7.adapter.out.coupon;
 
 import me.bartoszkomisarczyk.zr7.domain.coupon.Coupon;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponLookup;

@@ -1,11 +1,12 @@
-package me.bartoszkomisarczyk.zr7.integration;
+package me.bartoszkomisarczyk.zr7.integration.coupon;
 
-import me.bartoszkomisarczyk.zr7.adapter.geolocation.ipapi.IpApiGeoLocationProvider;
+import me.bartoszkomisarczyk.zr7.adapter.in.web.coupon.dto.ActivateCouponRequest;
+import me.bartoszkomisarczyk.zr7.adapter.in.web.coupon.dto.ActivateCouponResponse;
+import me.bartoszkomisarczyk.zr7.adapter.out.geolocation.ipapi.IpApiGeoLocationProvider;
 import me.bartoszkomisarczyk.zr7.application.coupon.CouponService;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponUsageResult;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationResult;
-import me.bartoszkomisarczyk.zr7.web.coupon.dto.ActivateCouponRequest;
-import me.bartoszkomisarczyk.zr7.web.coupon.dto.ActivateCouponResponse;
+import me.bartoszkomisarczyk.zr7.integration.AbstractIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;

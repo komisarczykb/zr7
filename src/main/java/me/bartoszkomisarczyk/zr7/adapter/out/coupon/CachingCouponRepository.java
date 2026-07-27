@@ -1,4 +1,4 @@
-package me.bartoszkomisarczyk.zr7.adapter.coupon.cache;
+package me.bartoszkomisarczyk.zr7.adapter.out.coupon;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
