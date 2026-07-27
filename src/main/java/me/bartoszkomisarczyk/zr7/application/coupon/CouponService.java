@@ -1,11 +1,13 @@
 package me.bartoszkomisarczyk.zr7.application.coupon;
 
+import me.bartoszkomisarczyk.zr7.domain.coupon.CouponCreationResult;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponLookup;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponRepository;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponUsageResult;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponUsageResult.*;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationException;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationProvider;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
@@ -26,6 +28,16 @@ public class CouponService {
         this.couponRepository = couponRepository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.geoLocationProvider = geoLocationProvider;
+    }
+
+    public CouponCreationResult createCoupon(String code, int maxUsage, String countryCode) {
+        try {
+            return new CouponCreationResult.Success(
+                    couponRepository.insert(code, maxUsage, countryCode.toUpperCase()));
+        } catch (DuplicateKeyException e) {
+            // unique_coupon_code_upper - case-insensitive code collision
+            return new CouponCreationResult.Conflict("Coupon code already exists");
+        }
     }
 
     public CouponUsageResult activateCoupon(String code, long userId, String userIp) {

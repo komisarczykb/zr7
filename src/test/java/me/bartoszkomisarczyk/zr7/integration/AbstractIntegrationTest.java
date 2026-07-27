@@ -94,4 +94,31 @@ public abstract class AbstractIntegrationTest {
     protected Connection connectAsAppUser() throws SQLException {
         return DriverManager.getConnection(postgreSQLContainer.getJdbcUrl(), "coupon_user", "couponPass");
     }
+
+    // --- read-only assertions on committed state, as coupon_user ---
+
+    protected int currentUsage(long couponId) throws SQLException {
+        return queryInt("SELECT current_usage FROM coupon WHERE id = " + couponId);
+    }
+
+    protected int usageCount(long couponId) throws SQLException {
+        return queryInt("SELECT count(*) FROM coupon_usage WHERE coupon_id = " + couponId);
+    }
+
+    protected int usageCountByUser(long userId) throws SQLException {
+        return queryInt("SELECT count(*) FROM coupon_usage WHERE user_id = " + userId);
+    }
+
+    protected int usageCountForUser(long couponId, long userId) throws SQLException {
+        return queryInt("SELECT count(*) FROM coupon_usage WHERE coupon_id = " + couponId + " AND user_id = " + userId);
+    }
+
+    private int queryInt(String sql) throws SQLException {
+        try (Connection c = connectAsAppUser();
+             Statement s = c.createStatement();
+             ResultSet rs = s.executeQuery(sql)) {
+            assertTrue(rs.next(), "expected a row for: " + sql);
+            return rs.getInt(1);
+        }
+    }
 }
