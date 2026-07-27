@@ -1,0 +1,25 @@
+meta {
+  name: Create - Validation Bad CountryCode (400)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/coupons
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "code": "BADCC",
+    "maxUsage": 10,
+    "countryCode": "POL"
+  }
+}
+
+tests {
+  test("returns 400 Bad Request", function () {
+    expect(res.getStatus()).to.equal(400);
+  });
+}

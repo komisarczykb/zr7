@@ -1,0 +1,32 @@
+meta {
+  name: Activate - Exhausted (409)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/coupons/activate
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "code": "USONLY",
+    "userId": 4004,
+    "userIp": "{{usIp}}"
+  }
+}
+
+docs {
+  Must run after "Activate - Fill Last Slot (200)" so both USONLY slots are already taken.
+}
+
+tests {
+  test("returns 409 Conflict", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+  test("status is EXHAUSTED", function () {
+    expect(res.getBody().status).to.equal("EXHAUSTED");
+  });
+}

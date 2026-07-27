@@ -11,23 +11,39 @@
 	<groupId>me.bartoszkomisarczyk</groupId>
 	<artifactId>zr7</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
-	<url/>
+	<name>Zadanie Rekrutacyjne 7</name>
+	<description>REST service for managing discount coupons:
+		creation and usage registration with case-insensitive codes,
+		per-country restriction via IP geolocation,
+		per-user single-use enforcement,
+		and concurrency-safe usage limits.
+	</description>
+	<url>https://github.com/komisarczykb/zr7</url>
 	<licenses>
-		<license/>
+		<license>
+			<name>MIT License</name>
+			<url>https://opensource.org/licenses/MIT</url>
+			<distribution>repo</distribution>
+		</license>
 	</licenses>
 	<developers>
-		<developer/>
+		<developer>
+			<name>Bartosz Komisarczyk</name>
+			<email>komisarczykb@gmail.com</email>
+			<url>https://github.com/komisarczykb</url>
+			<roles>
+				<role>Developer</role>
+			</roles>
+		</developer>
 	</developers>
 	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
+		<connection>scm:git:git://github.com/komisarczykb/zr7.git</connection>
+		<developerConnection>scm:git:ssh://git@github.com/komisarczykb/zr7.git</developerConnection>
+		<url>https://github.com/komisarczykb/zr7</url>
 	</scm>
 	<properties>
 		<java.version>25</java.version>
+		<resilience4j.version>2.4.0</resilience4j.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -35,11 +51,118 @@
 			<artifactId>spring-boot-starter</artifactId>
 		</dependency>
 
+		<!-- Source: https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-actuator -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+			<scope>compile</scope>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!-- Bean Validation for request payload checks (e.g. @NotBlank on coupon activation) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!-- In-memory cache for the geolocation decorator (version managed by Spring Boot BOM) -->
+		<dependency>
+			<groupId>com.github.ben-manes.caffeine</groupId>
+			<artifactId>caffeine</artifactId>
+		</dependency>
+
+		<!-- Circuit breaker for the ip-api adapter (Spring Boot 4 variant of the starter) -->
+		<!-- Source: https://mvnrepository.com/artifact/io.github.resilience4j/resilience4j-spring-boot4 -->
+		<dependency>
+			<groupId>io.github.resilience4j</groupId>
+			<artifactId>resilience4j-spring-boot4</artifactId>
+			<version>${resilience4j.version}</version>
+		</dependency>
+		<!--
+			Required by resilience4j: @CircuitBreaker is implemented as a Spring AOP aspect, and Boot's
+			AopAutoConfiguration only enables @AspectJ proxying when aspectjweaver is on the classpath.
+			Added directly because Boot 4 no longer ships a spring-boot-starter-aop; the version is still
+			managed by the Boot BOM.
+		-->
+		<dependency>
+			<groupId>org.aspectj</groupId>
+			<artifactId>aspectjweaver</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-resttestclient</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-restclient</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+		</dependency>
+
+		<!-- Test container oriented dependencies-->
+		<!-- Source: https://mvnrepository.com/artifact/org.testcontainers/testcontainers -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<version>2.0.5</version>
+			<scope>test</scope>
+		</dependency>
+		<!-- Source: https://mvnrepository.com/artifact/org.testcontainers/testcontainers-postgresql -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-postgresql</artifactId>
+			<version>2.0.5</version>
+			<scope>test</scope>
+		</dependency>
+		<!-- Source: https://mvnrepository.com/artifact/org.testcontainers/testcontainers-junit-jupiter -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-junit-jupiter</artifactId>
+			<version>2.0.5</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- :) -->
+
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
+		</dependency>
+
+		<!-- Generates and serves the OpenAPI spec (/v3/api-docs) and Swagger UI (/swagger-ui.html) -->
+		<!-- Source: https://mvnrepository.com/artifact/org.springdoc/springdoc-openapi-starter-webmvc-ui -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>3.0.3</version>
+		</dependency>
+
 	</dependencies>
 
 	<build>
@@ -47,6 +170,29 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<version>3.8.1</version>
+				<executions>
+					<execution>
+						<id>getClasspathFilenames</id>
+						<goals>
+							<goal>properties</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-javaagent:${org.mockito:mockito-core:jar}</argLine>
+					<excludedGroups>load</excludedGroups>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>

@@ -1,0 +1,19 @@
+meta {
+  name: Reference - Check IP Country (ip-api direct)
+  type: http
+  seq: 1
+}
+
+get {
+  url: http://ip-api.com/json/{{usIp}}?fields=57346&lang=en
+  body: none
+  auth: none
+}
+
+docs {
+  Not part of this service's API — calls ip-api.com directly (same call the app makes) so you can
+  confirm what country a test IP currently resolves to before asserting SUCCESS vs
+  COUNTRY_NOT_ALLOWED below. Swap {{usIp}} for {{otherCountryIp}} in the URL to check the other one;
+  ip-api's answer for a given IP can drift over time, so re-check if the activation assertions start
+  failing.
+}

@@ -1,0 +1,25 @@
+meta {
+  name: Activate - Validation Blank Code (400)
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/v1/coupons/activate
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "code": "",
+    "userId": 1,
+    "userIp": "{{usIp}}"
+  }
+}
+
+tests {
+  test("returns 400 Bad Request", function () {
+    expect(res.getStatus()).to.equal(400);
+  });
+}

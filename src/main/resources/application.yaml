@@ -1,3 +1,86 @@
 spring:
   application:
     name: zr7
+  sql:
+    init:
+      mode: never
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/coupons}
+    username: ${DB_USERNAME:coupon_user}
+    password: ${DB_PASSWORD:couponPass}
+    hikari:
+      pool-name: zr7-pool
+      # 10 = Hikari default; fits a small single-node coupon service on one Postgres instance.
+      # Tune up only if concurrent DB-bound requests actually exceed it.
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      # Max wait (ms) for a connection from the pool before the request fails.
+      # HikariCP exposes these as long ms fields, so Duration strings (20s, 30m) don't bind.
+      connection-timeout: ${DB_CONN_TIMEOUT:20000}
+      # Retire connections (ms) before the DB / any cloud proxy closes them (keep below infra's own limit).
+      max-lifetime: ${DB_MAX_LIFETIME:1800000}
+      # Light keepalive (ms) so pooled connections don't silently die behind short-lived network timeouts.
+      keepalive-time: ${DB_KEEPALIVE:300000}
+      # Only applies when minimum-idle < maximum-pool-size; harmless here, kept for a fixed-size pool (ms).
+      idle-timeout: ${DB_IDLE_TIMEOUT:600000}
+      # Surface leaked connections in logs during dev (ms). Set to 0 (or drop) in prod if noisy.
+      leak-detection-threshold: ${DB_LEAK_DETECTION:30000}
+      data-source-properties:
+        # Postgres driver: server-side prepared statements start after this many runs (driver default 5).
+        prepareThreshold: 5
+
+  # from assumption that our user has no permissions to use DDL, we need an separate user to do such things
+  flyway:
+    enabled: true
+    user: ${FLYWAY_USER:coupon_db_owner}
+    password: ${FLYWAY_PASSWORD:db_owner}
+  #timeouts for RestClient used in geolocation
+  http:
+    client:
+      connect-timeout: 3s
+      read-timeout: 5s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always
+
+geolocation:
+  provider: ipapi
+  cache:
+    ttl: 10m
+    # failures are re-tried far sooner than a resolved country goes stale
+    negative-ttl: 30s
+    max-size: 10000
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      ipapi:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
+        # bad input (private/reserved/malformed IP), not an upstream failure - must not open the circuit
+        ignore-exceptions:
+          - me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationUnresolvableException
+
+coupon:
+  exhaustion-cache:
+    ttl: 30m
+    max-size: 10000
+  lookup-cache:
+    ttl: 30m
+    max-size: 10000
+
+logging:
+  level:
+    org.flywaydb: info
+    org.springframework.boot.autoconfigure.flyway: info
+debug: false

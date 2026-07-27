@@ -1,0 +1,36 @@
+meta {
+  name: Activate - Geolocation Unavailable (503)
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/coupons/activate
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "code": "SUMMER2026",
+    "userId": 1,
+    "userIp": "{{privateIp}}"
+  }
+}
+
+docs {
+  A private/reserved IP makes ip-api return a "fail" status, which the service treats as a
+  GeoLocationException and fails closed rather than letting the request through.
+}
+
+tests {
+  test("returns 503 Service Unavailable", function () {
+    expect(res.getStatus()).to.equal(503);
+  });
+  test("status is GEOLOCATION_UNAVAILABLE", function () {
+    expect(res.getBody().status).to.equal("GEOLOCATION_UNAVAILABLE");
+  });
+  test("Retry-After header present", function () {
+    expect(res.getHeader("Retry-After")).to.exist;
+  });
+}

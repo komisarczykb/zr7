@@ -1,0 +1,32 @@
+meta {
+  name: Activate - Already Used (409)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/coupons/activate
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "code": "USONLY",
+    "userId": 1001,
+    "userIp": "{{usIp}}"
+  }
+}
+
+docs {
+  Same code/userId pair as "Activate - Success (200)" — must run after it.
+}
+
+tests {
+  test("returns 409 Conflict", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+  test("status is ALREADY_USED", function () {
+    expect(res.getBody().status).to.equal("ALREADY_USED");
+  });
+}

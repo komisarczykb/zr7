@@ -1,0 +1,33 @@
+meta {
+  name: Activate - Country Not Allowed (403)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/coupons/activate
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "code": "USONLY",
+    "userId": 2002,
+    "userIp": "{{otherCountryIp}}"
+  }
+}
+
+docs {
+  Confirm {{otherCountryIp}} does NOT resolve to US via the Reference request first — swap the
+  environment variable if ip-api's answer for it has drifted.
+}
+
+tests {
+  test("returns 403 Forbidden", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+  test("status is COUNTRY_NOT_ALLOWED", function () {
+    expect(res.getBody().status).to.equal("COUNTRY_NOT_ALLOWED");
+  });
+}
