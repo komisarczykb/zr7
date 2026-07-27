@@ -1,0 +1,30 @@
+meta {
+  name: Create - Duplicate Code (409)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/coupons
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "code": "summer2026",
+    "maxUsage": 50,
+    "countryCode": "PL"
+  }
+}
+
+docs {
+  Depends on "Create - Success (SUMMER2026)" having run first. Uniqueness is case-insensitive,
+  so the lower-cased code here still collides.
+}
+
+tests {
+  test("returns 409 Conflict", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+}

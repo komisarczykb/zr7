@@ -1,0 +1,33 @@
+meta {
+  name: Activate - Fill Last Slot (200)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/coupons/activate
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "code": "USONLY",
+    "userId": 3003,
+    "userIp": "{{usIp}}"
+  }
+}
+
+docs {
+  USONLY has maxUsage 2; "Activate - Success (200)" consumed the first slot, this consumes the
+  second (and last) one so the next call is guaranteed to be EXHAUSTED.
+}
+
+tests {
+  test("returns 200 OK", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("status is SUCCESS", function () {
+    expect(res.getBody().status).to.equal("SUCCESS");
+  });
+}

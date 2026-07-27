@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "zr7 Coupon API",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

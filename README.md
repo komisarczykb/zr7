@@ -9,7 +9,7 @@
 - **Database migrations** - Flyway (via `spring-boot-starter-flyway`)
 - **Caching** - Caffeine (in-process caches for geolocation lookups and some coupon data)
 - **Resilience** - Resilience4j 2.4.0 (`resilience4j-spring-boot4`) circuit breaker for the geolocation adapter
-- **Observability** - Spring Boot Actuator (exposes circuit breaker health)
+- **Observability** - Spring Boot Actuator (`/actuator/health`)
 - **API documentation** - springdoc-openapi 3.0.3 (`springdoc-openapi-starter-webmvc-ui`), generating the OpenAPI 3
   spec and Swagger UI at runtime from the controller/DTO annotations
 - **Testing** - JUnit 5 / Mockito (`spring-boot-starter-test`), Testcontainers 2.0.5 (PostgreSQL integration tests)
@@ -39,6 +39,26 @@ docker compose up -d
 
 `./mvnw test` runs the full test suite (JUnit + Testcontainers-backed integration tests) and needs Docker but not
 `docker compose up` - Testcontainers manages its own throwaway Postgres container per test run.
+
+### Tearing down
+
+```
+docker compose --profile full down
+```
+
+Stops and removes the `app` and `postgres` containers (and the default network Compose created for them). If you
+only started the database (`docker compose up -d`, no `--profile full`), a plain `docker compose down` is
+equivalent since `postgres` is the only service that would be running.
+
+Postgres has no named volume - its data directory lives in the container's own writable layer, so `docker compose
+down` (without `-v`) already discards it on the next `up`; there is no `-v` flag needed to reset the database, and
+none to add if you actually wanted the data to persist across a teardown.
+
+To also drop the built `app` image (forcing a rebuild on the next `up --build`):
+
+```
+docker compose --profile full down --rmi local
+```
 
 ## Timezone handling
 
@@ -151,7 +171,7 @@ Country restriction is resolved through a geolocation port, the implementation i
   circuit surfaces through a fallback as an ordinary `GeoLocationException`, so the HTTP contract is unchanged
   (`503 GEOLOCATION_UNAVAILABLE`). `GeoLocationUnresolvableException` - the provider answering normally that an IP is
   private, reserved or malformed - is listed under `ignore-exceptions`: bad input must not open the circuit for
-  everyone else. The breaker is also exposed through the actuator health endpoint.
+  everyone else.
 
 ## Testing
 
@@ -197,6 +217,198 @@ thresholds) and so gets its own cached context.
   `setRollbackOnly()` and marks the coupon exhausted, while a successful one never rolls back. Runs
   in milliseconds and exists so the business-rule branching doesn't need a container to exercise; the
   integration tests above remain the source of truth for real database behaviour.
+
+## Manual API verification (Postman / Bruno)
+
+A ready-to-import [Bruno](https://www.usebruno.com/) collection lives at `bruno/` (open the folder
+in Bruno, select the `Local` environment). It mirrors the scenarios below, in the same run order,
+with assertions on status code and response body already wired up per request. The curl commands
+below are the same scenarios for manual use or for pasting into Postman ("Import" → raw text/cURL).
+
+All commands assume the app is reachable at `http://localhost:8080` (`docker compose --profile full
+up --build`, or `docker compose up -d` + `./mvnw spring-boot:run`).
+
+### 0. Sanity checks
+
+```bash
+# Health
+curl -i http://localhost:8080/actuator/health
+
+# OpenAPI spec / Swagger UI reachable
+curl -i http://localhost:8080/v3/api-docs
+```
+
+### 1. Create coupon — success (201)
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/coupons \
+  -H "Content-Type: application/json" \
+  -d '{"code":"SUMMER2026","maxUsage":100,"countryCode":"PL"}'
+```
+Expect `201`, body has `code, creationDate, maxUsage, currentUsage=0, countryCode` (no `id`).
+
+### 2. Create coupon — duplicate code, case-insensitive (409)
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/coupons \
+  -H "Content-Type: application/json" \
+  -d '{"code":"summer2026","maxUsage":50,"countryCode":"PL"}'
+```
+Expect `409` with `ProblemDetail`.
+
+### 3. Create coupon — validation errors (400)
+
+```bash
+# blank code
+curl -i -X POST http://localhost:8080/api/v1/coupons \
+  -H "Content-Type: application/json" \
+  -d '{"code":"","maxUsage":10,"countryCode":"PL"}'
+
+# non-positive maxUsage
+curl -i -X POST http://localhost:8080/api/v1/coupons \
+  -H "Content-Type: application/json" \
+  -d '{"code":"BADQTY","maxUsage":0,"countryCode":"PL"}'
+
+# invalid countryCode (not 2 letters)
+curl -i -X POST http://localhost:8080/api/v1/coupons \
+  -H "Content-Type: application/json" \
+  -d '{"code":"BADCC","maxUsage":10,"countryCode":"POL"}'
+
+# code over 16 chars
+curl -i -X POST http://localhost:8080/api/v1/coupons \
+  -H "Content-Type: application/json" \
+  -d '{"code":"THISCODEISWAYTOOLONG","maxUsage":10,"countryCode":"PL"}'
+```
+Each should return `400` with a `ProblemDetail` listing the failing field.
+
+### 4. Get coupon — success (200) / not found (404)
+
+```bash
+curl -i http://localhost:8080/api/v1/coupons/SUMMER2026
+curl -i http://localhost:8080/api/v1/coupons/summer2026   # case-insensitive lookup
+
+curl -i http://localhost:8080/api/v1/coupons/DOESNOTEXIST
+```
+
+### 5. Activate — pick a real IP and confirm its country first
+
+The country check calls the real `ip-api.com`, so confirm what country your test IP resolves to
+before asserting `SUCCESS` vs `COUNTRY_NOT_ALLOWED`:
+
+```bash
+curl -s "http://ip-api.com/json/8.8.8.8?fields=57346&lang=en"
+```
+`8.8.8.8` (Google DNS) is stable and resolves to `US`. Create a matching coupon:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/coupons \
+  -H "Content-Type: application/json" \
+  -d '{"code":"USONLY","maxUsage":2,"countryCode":"US"}'
+```
+
+### 6. Activate — success (200)
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/coupons/activate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"USONLY","userId":1001,"userIp":"8.8.8.8"}'
+```
+Expect `{"status":"SUCCESS"}`, `200`. Confirm via GET that `currentUsage` incremented:
+```bash
+curl -i http://localhost:8080/api/v1/coupons/USONLY
+```
+
+### 7. Activate — already used, same user (409)
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/coupons/activate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"USONLY","userId":1001,"userIp":"8.8.8.8"}'
+```
+Expect `{"status":"ALREADY_USED"}`, `409`.
+
+### 8. Activate — country not allowed (403)
+
+Reuse `USONLY` (country `US`) with an IP resolving elsewhere, e.g. `1.1.1.1`:
+```bash
+curl -s "http://ip-api.com/json/1.1.1.1?fields=57346&lang=en"   # check its country first
+
+curl -i -X POST http://localhost:8080/api/v1/coupons/activate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"USONLY","userId":2002,"userIp":"1.1.1.1"}'
+```
+Expect `{"status":"COUNTRY_NOT_ALLOWED"}`, `403`.
+
+### 9. Activate — exhausted (409)
+
+`USONLY` has `maxUsage:2`; one successful usage already happened in step 6. Consume the last slot,
+then try to exceed it:
+```bash
+# 2nd successful redemption (different user, same US IP) -> fills maxUsage
+curl -i -X POST http://localhost:8080/api/v1/coupons/activate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"USONLY","userId":3003,"userIp":"8.8.8.8"}'
+
+# 3rd attempt, new user -> exhausted
+curl -i -X POST http://localhost:8080/api/v1/coupons/activate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"USONLY","userId":4004,"userIp":"8.8.8.8"}'
+```
+Expect `{"status":"EXHAUSTED"}`, `409` on the last call.
+
+### 10. Activate — coupon not found (404)
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/coupons/activate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"NOSUCHCODE","userId":1,"userIp":"8.8.8.8"}'
+```
+
+### 11. Activate — geolocation unavailable (503)
+
+Private/reserved IPs make `ip-api` return a `fail` status, which the service treats as
+`GeoLocationException` → fail-closed:
+```bash
+curl -i -X POST http://localhost:8080/api/v1/coupons/activate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"SUMMER2026","userId":1,"userIp":"10.0.0.1"}'
+```
+Expect `503`, `{"status":"GEOLOCATION_UNAVAILABLE"}`, and a `Retry-After` header (`5` for generic
+failure, `60` if the real 45 req/min rate limit was hit).
+
+### 12. Activate — validation errors (400)
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/coupons/activate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"","userId":1,"userIp":"8.8.8.8"}'
+
+curl -i -X POST http://localhost:8080/api/v1/coupons/activate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"SUMMER2026","userId":null,"userIp":"8.8.8.8"}'
+
+curl -i -X POST http://localhost:8080/api/v1/coupons/activate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"SUMMER2026","userId":1,"userIp":""}'
+```
+
+### 13. Caching behavior spot-checks
+
+```bash
+# Repeat GET of the same coupon lookup — lookup cache serves country/id, but currentUsage stays live
+curl -i http://localhost:8080/api/v1/coupons/SUMMER2026
+curl -i http://localhost:8080/api/v1/coupons/SUMMER2026
+
+# Actuator health check
+curl -s http://localhost:8080/actuator/health | jq
+```
+
+Notes:
+- Because geolocation hits the real free `ip-api.com` (45 req/min), avoid hammering scenarios 5–11
+  in a tight loop — it will trip the rate limit / circuit breaker unintentionally.
+- An IP's reported country can drift over time or by provider, so the pre-check curl in step 8 (or
+  the "Reference - Check IP Country" request in the Bruno collection) exists to keep the test
+  deterministic — swap in whatever IP+country pair `ip-api` actually returns for you.
 
 ## Decisions
 

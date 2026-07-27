@@ -1,0 +1,17 @@
+meta {
+  name: Get - Not Found (404)
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/coupons/DOESNOTEXIST
+  body: none
+  auth: none
+}
+
+tests {
+  test("returns 404 Not Found", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+}
