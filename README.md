@@ -10,11 +10,14 @@
 
 ## Timezone handling
 
-- Application and db enforces the same timezone usage by:
-    - jvm flag: `-Duser.timezone=UTC`
-    - hibernate: `spring.jpa.properties.hibernate.jdbc.time_zone=UTC`
-    - postgres container command: `-c timezone=UTC -c log_timezone=UTC`
-    - postgres env settings: `TZ: UTC` and `PGTZ: UTC`
+- Timestamps are timezone-independent by construction, not by configuration:
+    - `creation_date` / `used_at` are `TIMESTAMPTZ`, so Postgres stores an absolute point in time
+    - the JDBC mapper reads them straight into `java.time.Instant`, which carries no offset, so the
+      JVM's default timezone cannot shift the value on the way out
+- The Postgres container is additionally pinned to UTC so server-side output (logs, `now()`, psql
+  sessions) is unambiguous:
+    - container command: `-c timezone=UTC -c log_timezone=UTC`
+    - env settings: `TZ: UTC` and `PGTZ: UTC`
 
 ## Data model
 
@@ -27,11 +30,56 @@ Two tables, defined by the Flyway migrations:
 - **coupon_usage** - one row per redemption. The `(coupon_id, user_id)` UNIQUE constraint enforces single-use per
   customer; `used_at` is a `TIMESTAMPTZ`.
 
+## Coupon API
+
+- `POST /api/v1/coupons` - create a coupon. Body: `{code, maxUsage, countryCode}` (`code` is
+  `@NotBlank`/max 16 chars, `maxUsage` is `@Positive`, `countryCode` is a two-letter `@Pattern`).
+  Returns `201 CREATED` with a `CouponResponse` (`code, creationDate, maxUsage, currentUsage,
+  countryCode` - the internal database id is never included, per decision #2), or `409 CONFLICT`
+  with a `ProblemDetail` if `code` already exists (case-insensitively), or `400 BAD_REQUEST` with a
+  `ProblemDetail` listing the failing fields.
+- `GET /api/v1/coupons/{code}` - read a coupon back as the same `CouponResponse` shape. Returns
+  `404 NOT_FOUND` with a `ProblemDetail` for an unknown code. `currentUsage` is always read live
+  from the database (never from the lookup cache), so it reflects concurrent activations.
+- `POST /api/v1/coupons/activate` - activate (redeem) a coupon. Body: `{code, userId, userIp}` (`code`
+  and `userIp` are `@NotBlank`). Returns `{status}` where `status` is one of `SUCCESS` (`200`),
+  `NOT_FOUND` (`404`), `COUNTRY_NOT_ALLOWED` (`403`), `ALREADY_USED` (`409`), `EXHAUSTED` (`409`), or
+  `GEOLOCATION_UNAVAILABLE` (`503`, with a `Retry-After` header).
+- **Activation flow** - `CouponService.activateCoupon` checks rejection reasons in a fixed order, so
+  the response for a given request and DB state is deterministic regardless of cache warmth: (1) the
+  coupon must exist (`NOT_FOUND`), (2) the caller's country, resolved from `userIp` via the geolocation
+  port, must match (`COUNTRY_NOT_ALLOWED` / `GEOLOCATION_UNAVAILABLE`), (3) the exhaustion cache (see
+  below) must be clear (`EXHAUSTED`), then `insertUsage` + `incrementUsage` run in a single transaction.
+  The usage row is inserted *before* the conditional `current_usage` update, so a duplicate activation
+  is caught by the `(coupon_id, user_id)` unique constraint (`ALREADY_USED`), and an update that
+  affects 0 rows (because `current_usage` already hit `max_usage`) rolls the whole transaction back
+  and marks the code exhausted - this keeps `count(coupon_usage) == current_usage` under concurrent
+  requests without needing row-level locking.
+- **Fail-closed on geolocation failure** - if the geolocation provider cannot be reached, times out, or
+  rate-limits us (`GeoLocationException`), the country cannot be determined, so the request is
+  rejected as `GEOLOCATION_UNAVAILABLE` rather than being let through *or* reported as
+  `COUNTRY_NOT_ALLOWED`. Conflating a provider outage with a policy decision would tell a legitimate
+  customer their country is banned, and would give a client no way to tell "retry me" from "don't
+  bother". The rate-limited case (`GeoLocationRateLimitedException`) gets a longer `Retry-After` (60s)
+  than a generic failure (5s). Every occurrence is logged at `WARN`.
+
+## Coupon caching
+
+Two Caffeine-backed caches sit in front of the DB, following the same decorator-in-front-of-a-port
+shape as `CachingGeoLocationProvider` below.
+
+- **`CouponExhaustionCache`** (`application/coupon`) - once `incrementUsage` affects 0 rows the code
+  is marked exhausted, keyed by uppercased code. `current_usage` never decreases (no reset/limit-raise
+  endpoint exists), so this fact is permanent - repeat activation attempts for a dead code skip the
+  database entirely. Tunable via `coupon.exhaustion-cache.ttl` and `coupon.exhaustion-cache.max-size`.
+- **`CachingCouponRepository`** (`adapter/coupon/cache`) - a `@Primary` decorator around
+  `JdbcCouponRepository` (now `@Qualifier("delegateCouponRepository")`) that caches `findByCode`,
+  since a coupon's `(id, countryCode)` never changes after creation. Tunable via
+  `coupon.lookup-cache.ttl` and `coupon.lookup-cache.max-size`.
+
 ## Geolocation IP verification
 
-Country restriction is resolved through a geolocation port.
-The implementation is kept minimal as I don't consider it being most important part of the project and I'm running out
-of time :)
+Country restriction is resolved through a geolocation port, the implementation is kept minimal.
 
 - **Port** - `domain/geolocation/GeoLocationProvider` returns a `GeoLocationResult` (ISO-3166-1 alpha-2 country code as
   String) or throws `GeoLocationException`. Main coupon service depends on the port only.
@@ -67,6 +115,22 @@ permissions. All test classes share a single container and application context.
   constraints, the case-insensitive uniqueness, the single-use constraint, and the `coupon_usage` foreign key.
 - **`GeoLocationCachingIntegrationTest`** — asserts a second `resolve()` for the same IP is served from cache while the
   upstream is hit once.
+- **`CouponActivationIntegrationTest`** — covers the activation status matrix (not found, country
+  mismatch, already-used, exhausted, success) and asserts no writes happen on the rejected paths.
+- **`CouponConcurrencyIntegrationTest`** — concurrent activation by distinct users respects
+  `max_usage`, concurrent activation by the same user succeeds exactly once, and an exhausted coupon
+  leaves no orphan `coupon_usage` row.
+- **`CouponLookupCachingIntegrationTest`** — asserts the injected `CouponRepository` is the caching
+  decorator, and that a repeated or differently-cased lookup for the same code hits the delegate once.
+- **`CouponCreationIntegrationTest`** — the create/read HTTP contract: `201` on success without the
+  database id on the wire, `409` on a case-insensitive duplicate code, `400` on each invalid field, and
+  that `GET /api/v1/coupons/{code}` round-trips all five required fields (also case-insensitively) or
+  `404`s for an unknown code.
+- **`CouponServiceTest`** (`application/coupon`, not an integration test — no Testcontainers/Docker) —
+  every `CouponCreationResult` and `CouponUsageResult` branch of `CouponService`, driven through
+  Mockito mocks of `CouponRepository`, `GeoLocationProvider` and `CouponExhaustionCache`. Runs in
+  milliseconds and exists so the business-rule branching doesn't need a container to exercise; the
+  integration tests above remain the source of truth for real database behaviour.
 
 ## Decisions
 
@@ -116,10 +180,17 @@ permissions. All test classes share a single container and application context.
 11. **Caffeine cache + decorator in front of the port** - cut redundant *SUCCESSFUL* ip-api calls (the free tier's 45
     req/min, see [#10](#decisions)) without the domain knowing anything about caching: the decorator implements the same
     port and is`@Primary`.
+12. **Coupon exhaustion is cached permanently, not just TTL-bounded** - once a code is observed
+    exhausted it stays that way forever (no reset/limit-raise endpoint exists), so caching it isn't an
+    optimization with a correctness trade-off the way the geolocation cache's TTL is - the TTL on
+    `CouponExhaustionCache` only bounds memory usage, not staleness.
+13. **Coupon lookup caching reuses the geolocation decorator pattern** - `CachingCouponRepository` is
+    `@Primary` in front of a qualified JDBC delegate, keeping the caching concern out of
+    `JdbcCouponRepository` and `CouponService`, consistent with [decision #11](#decisions).
 
 ## Discarded ideas
 
-1. **Two tables in the database** - `coupon` (id pk, code, max_usage, country_code, created_at) and `coupon_usage`
+1. **coupon usage separation** - `coupon` (id pk, code, max_usage, country_code, created_at) and `coupon_usage`
    ((coupon_id, user_id) pk, used_at). An insert into `coupon_usage` guarantees uniqueness of usage per user; a prepared
    statement speeds up the insert operation, and a read replica verifies the usage count via an aggregate function.
    **Reason for rejection**:

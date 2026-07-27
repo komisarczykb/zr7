@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * Smoke test that the application context boots and Flyway applies every migration against a
  * fresh database, leaving the application healthy.
  */
-public class AppContextIntegrationTest extends AbstractIntegrationTest {
+class AppContextIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private TestRestTemplate restTemplate;

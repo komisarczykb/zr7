@@ -66,9 +66,11 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
+
+		<!-- Bean Validation for request payload checks (e.g. @NotBlank on coupon activation) -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-jpa</artifactId>
+			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
 
 		<!-- In-memory cache for the geolocation decorator (version managed by Spring Boot BOM) -->
@@ -85,7 +87,6 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-restclient</artifactId>
-			<scope>test</scope>
 		</dependency>
 
 		<dependency>
@@ -163,6 +164,7 @@
 				<artifactId>maven-surefire-plugin</artifactId>
 				<configuration>
 					<argLine>-javaagent:${org.mockito:mockito-core:jar}</argLine>
+					<excludedGroups>load</excludedGroups>
 				</configuration>
 			</plugin>
 		</plugins>

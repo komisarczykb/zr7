@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * {@code coupon_user} on purpose - the rules hold even for our own app user, because they are
  * enforced by the schema rather than application code.
  */
-public class DbSchemaConstraintsTest extends AbstractIntegrationTest {
+class DbSchemaConstraintsIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void couponRejectsNonPositiveMaxUsage() {
