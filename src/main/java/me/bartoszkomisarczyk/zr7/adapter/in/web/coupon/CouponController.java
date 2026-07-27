@@ -15,6 +15,8 @@ import me.bartoszkomisarczyk.zr7.adapter.in.web.coupon.dto.CreateCouponRequest;
 import me.bartoszkomisarczyk.zr7.application.coupon.CouponService;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponCreationResult;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponUsageResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -31,6 +33,8 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "coupons", description = "Coupon creation, lookup and activation")
 public class CouponController {
 
+    private static final Logger log = LoggerFactory.getLogger(CouponController.class);
+
     private final CouponService couponService;
 
     public CouponController(CouponService couponService) {
@@ -46,6 +50,7 @@ public class CouponController {
     @ApiResponse(responseCode = "409", description = "A coupon with this code already exists (case-insensitively)",
             content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     public ResponseEntity<?> create(@Valid @RequestBody CreateCouponRequest request) {
+        log.debug("Received request to create coupon {}", request.code());
         CouponCreationResult result = couponService.createCoupon(
                 request.code(), request.maxUsage(), request.countryCode());
         return switch (result) {
@@ -95,6 +100,7 @@ public class CouponController {
                     schema = @Schema(type = "integer")),
             content = @Content(schema = @Schema(implementation = ActivateCouponResponse.class)))
     public ResponseEntity<ActivateCouponResponse> activate(@Valid @RequestBody ActivateCouponRequest request) {
+        log.debug("Received request to activate coupon {} for user {}", request.code(), request.userId());
         CouponUsageResult result = couponService.activateCoupon(
                 request.code(), request.userId(), request.userIp());
         return switch (result) {

@@ -7,6 +7,8 @@ import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationProvider;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationRateLimitedException;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationResult;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationUnresolvableException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -48,6 +50,8 @@ import org.springframework.web.client.RestClientException;
 @ConditionalOnProperty(name = "geolocation.provider", havingValue = "ipapi", matchIfMissing = true)
 public class IpApiGeoLocationProvider implements GeoLocationProvider {
 
+    private static final Logger log = LoggerFactory.getLogger(IpApiGeoLocationProvider.class);
+
     /** Instance name configured under {@code resilience4j.circuitbreaker.instances} in application.yaml. */
     static final String CIRCUIT_BREAKER_NAME = "ipapi";
 
@@ -60,6 +64,7 @@ public class IpApiGeoLocationProvider implements GeoLocationProvider {
     @Override
     @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "circuitOpen")
     public GeoLocationResult resolve(String ip) {
+        log.debug("Calling ip-api to resolve geolocation for {}", ip);
         IpApiResponse response;
         try {
             response = restClient.get()
@@ -92,6 +97,7 @@ public class IpApiGeoLocationProvider implements GeoLocationProvider {
             throw new GeoLocationUnresolvableException(errorMessage);
         }
 
+        log.debug("Resolved {} to country {}", ip, response.countryCode());
         return new GeoLocationResult(response.countryCode());
     }
 
@@ -102,6 +108,7 @@ public class IpApiGeoLocationProvider implements GeoLocationProvider {
      */
     @SuppressWarnings("unused") // referenced by name from @CircuitBreaker(fallbackMethod = ...)
     private GeoLocationResult circuitOpen(String ip, CallNotPermittedException e) {
+        log.warn("Geolocation circuit breaker '{}' is open, short-circuiting call for {}", CIRCUIT_BREAKER_NAME, ip);
         throw new GeoLocationException("Geolocation provider circuit is open", e);
     }
 
