@@ -1,5 +1,58 @@
 # zr7
 
+A coupon service: coupons are created with a country restriction and a global usage limit, then redeemed
+(activated) at most once per user, with the redeeming user's country resolved from their IP address.
+
+## Contents
+
+- [Assumptions](#assumptions) - the constraints the design is built on; **start here**
+- [Tech Stack](#tech-stack)
+- [How to run](#how-to-run) - Docker only, one command
+- [Timezone handling](#timezone-handling)
+- [Data model](#data-model)
+- [Coupon API](#coupon-api) - endpoints, the activation flow and its rejection ordering
+- [Coupon caching](#coupon-caching)
+- [Geolocation IP verification](#geolocation-ip-verification) - port, adapter, caching, circuit breaker
+- [Testing](#testing)
+- [Manual API verification (Postman / Bruno)](#manual-api-verification-postman--bruno)
+- [Decisions](#decisions) - what was chosen and why
+- [Discarded ideas](#discarded-ideas) - what was rejected and why
+
+## Assumptions
+
+These assumptions shape the code more than anything else in this README - most of the design below only
+makes sense in their light. Each links to the [Decisions](#decisions) entry carrying the full reasoning.
+
+- **The service is internal-only and its caller is already trusted** - it sits in the internal service
+  mesh (e.g. behind checkout at payment confirmation), never on the public internet, and the user was
+  authenticated upstream. → No authentication, authorization or transport security is implemented here,
+  and `userId` is an opaque number this service does not verify - it only keys the one-redemption-per-user
+  rule. See [decision #7](#decisions).
+- **Country comes from the request IP, not the delivery address** - per the task requirements. → The
+  activation flow calls a geolocation port and compares its ISO country code against the coupon's; a
+  differing delivery address is not consulted anywhere. See [decision #3](#decisions).
+- **The database schema is owned by a different team than the running app** - so the app's DB user is
+  assumed to have no DDL rights. → Flyway connects as `coupon_db_owner` while the app connects as
+  `coupon_user` (DML grants only), and `db/init/01_roles.sql` sits outside the migrations because it
+  represents that external team's bootstrap. See [decision #8](#decisions).
+- **A coupon is used the moment a valid activation commits** - there is no reserve/hold/confirm
+  handshake and no compensating "release" step. → `insertUsage` + `incrementUsage` in one transaction is
+  the whole redemption; a caller that fails after a `SUCCESS` cannot give the usage back.
+  See [decision #5](#decisions).
+- **Usage only ever grows** - no endpoint resets `current_usage`, raises `max_usage`, or cancels a
+  redemption. → Exhaustion is a permanent fact, so `CouponExhaustionCache` can cache it without a
+  staleness trade-off (its TTL bounds memory, not correctness). See [decision #11](#decisions).
+- **Coupons are addressed by `code`, case-insensitively** - the numeric primary key is an internal
+  detail. → The id never appears in a request or response; lookups uppercase the code and the DB enforces
+  uniqueness through a `UPPER(code)` index. See [decision #2](#decisions).
+- **Geolocation is prototype-grade and rate-limited** - the free ip-api.com tier allows 45 requests/min
+  per IP, and a production deployment would swap in a paid provider behind the same port. → The caching
+  decorator, negative caching and circuit breaker in front of the adapter exist primarily to stay inside
+  that budget and to fail fast when it is exceeded. See decisions [#9](#decisions) and [#13](#decisions).
+- **One Postgres instance, no DB-level tuning** - `max_connections` stays at the default 100 across all
+  app instances. → That connection ceiling, not application code, is the assumed scaling bottleneck; the
+  Hikari pool is sized conservatively (10) against it. See [decision #6](#decisions).
+
 ## Tech Stack
 
 - **Java** - 25 (25.0.3-tem)
@@ -105,16 +158,21 @@ response contract for every status below is also browsable/testable straight fro
   and `userIp` are `@NotBlank`). Returns `{status}` where `status` is one of `SUCCESS` (`200`),
   `NOT_FOUND` (`404`), `COUNTRY_NOT_ALLOWED` (`403`), `ALREADY_USED` (`409`), `EXHAUSTED` (`409`), or
   `GEOLOCATION_UNAVAILABLE` (`503`, with a `Retry-After` header).
-- **Activation flow** - `CouponService.activateCoupon` checks rejection reasons in a fixed order, so
-  the response for a given request and DB state is deterministic regardless of cache warmth: (1) the
-  coupon must exist (`NOT_FOUND`), (2) the caller's country, resolved from `userIp` via the geolocation
-  port, must match (`COUNTRY_NOT_ALLOWED` / `GEOLOCATION_UNAVAILABLE`), (3) the exhaustion cache (see
-  below) must be clear (`EXHAUSTED`), then `insertUsage` + `incrementUsage` run in a single transaction.
-  The usage row is inserted *before* the conditional `current_usage` update, so a duplicate activation
-  is caught by the `(coupon_id, user_id)` unique constraint (`ALREADY_USED`), and an update that
-  affects 0 rows (because `current_usage` already hit `max_usage`) rolls the whole transaction back
-  and marks the code exhausted - this keeps `count(coupon_usage) == current_usage` under concurrent
-  requests without needing row-level locking.
+- **Activation flow** - `CouponService.activateCoupon` checks rejection reasons in a fixed order: (1)
+  the coupon must exist (`NOT_FOUND`), (2) the caller's country, resolved from `userIp` via the
+  geolocation port, must match (`COUNTRY_NOT_ALLOWED` / `GEOLOCATION_UNAVAILABLE`), (3) the exhaustion
+  cache (see below) must be clear (`EXHAUSTED`), then `insertUsage` + `incrementUsage` run in a single
+  transaction. This ordering makes `NOT_FOUND` and `COUNTRY_NOT_ALLOWED` deterministic for a given
+  request and DB state regardless of cache warmth. `EXHAUSTED` vs `ALREADY_USED` is the one exception:
+  the exhaustion cache is a per-JVM Caffeine cache (see below) with no cross-replica sync, so a coupon
+  that is both exhausted and already redeemed by the same user can resolve to `EXHAUSTED` on a replica
+  whose cache is warm and `ALREADY_USED` on a replica whose cache is cold. Both map to `409`, so the
+  blast radius is limited to which rejection *reason* is reported, not the outcome. The usage row is
+  inserted *before* the conditional `current_usage` update, so a duplicate activation is caught by the
+  `(coupon_id, user_id)` unique constraint (`ALREADY_USED`), and an update that affects 0 rows (because
+  `current_usage` already hit `max_usage`) rolls the whole transaction back and marks the code exhausted
+  - this keeps `count(coupon_usage) == current_usage` under concurrent requests without needing
+  row-level locking.
 - **Fail-closed on geolocation failure** - if the geolocation provider cannot be reached, times out, or
   rate-limits us (`GeoLocationException`), the country cannot be determined, so the request is
   rejected as `GEOLOCATION_UNAVAILABLE` rather than being let through *or* reported as
@@ -140,7 +198,7 @@ shape as `CachingGeoLocationProvider` below.
 
 ## Geolocation IP verification
 
-Country restriction is resolved through a geolocation port, the implementation is kept minimal.
+Country restriction is resolved through a geolocation port; the implementation is kept minimal.
 
 - **Port** - `domain/geolocation/GeoLocationProvider` returns a `GeoLocationResult` (ISO-3166-1 alpha-2 country code as
   String) or throws `GeoLocationException`. Main coupon service depends on the port only.
@@ -148,13 +206,13 @@ Country restriction is resolved through a geolocation port, the implementation i
   endpoint.
 - **Provider** - `geolocation.provider` selects the active adapter (`ipapi` in this case). Both the adapter and its
   `RestClient` bean are gated by `@ConditionalOnProperty` but also set as `matchIfMissing = true` so the context boots
-  cleanly when the property is absent;
+  cleanly when the property is absent.
 - **HTTP client timeouts** - `spring.http.client.connect-timeout: 3s`, `spring.http.client.read-timeout: 5s`; a hanging
   upstream fails fast instead of holding a request thread.
 - **ip-api default provider** - chosen because of the ease of use, api allows to get a lot of information but I've
   decided to limit the request with only 4 fields (`fields=57346`) - status, message, countryCode, query. On a
   successful lookup only status, countryCode and query (the looked-up IP) are present; on a `fail` status there is no
-  countryCode, and message carries the failure reason instead. Few fields are language dependant, not
+  countryCode, and message carries the failure reason instead. A few fields are language dependent, not
   in our case at the moment of creating the application but `lang=en` parameter has been added to enforce English
   language just in case. **HOWEVER, THE BIGGEST DOWNSIDE OF THIS PROVIDER IS 45 REQUESTS/MINUTE LIMITATION FOR FREE TIER
   WHICH WE USE**
@@ -178,8 +236,8 @@ Country restriction is resolved through a geolocation port, the implementation i
 Run with `./mvnw test`.
 
 Integration tests run against PostgreSQL via Testcontainers that reproduces the expected db config;
-`db/init/01_roles.sql` creates the DDL-capable owner and the DML-only user used by the app (based on assmuption that
-external team manages db). Then Flyway applies `src/main/resources/db/migration` scripts and sets up tables and grants
+`db/init/01_roles.sql` creates the DDL-capable owner and the DML-only user used by the app (based on the assumption
+that an external team manages the db). Then Flyway applies `src/main/resources/db/migration` scripts and sets up tables and grants
 permissions. All test classes share a single container; nearly all share a single application context — the exception is
 `GeoLocationCircuitBreakerIntegrationTest`, which overrides `@SpringBootTest` properties (dead endpoint, lowered
 thresholds) and so gets its own cached context.
@@ -237,6 +295,9 @@ curl -i http://localhost:8080/actuator/health
 # OpenAPI spec / Swagger UI reachable
 curl -i http://localhost:8080/v3/api-docs
 ```
+
+<details>
+<summary><b>Full curl walkthrough — scenarios 1–13</b> (click to expand)</summary>
 
 ### 1. Create coupon — success (201)
 
@@ -403,6 +464,8 @@ curl -i http://localhost:8080/api/v1/coupons/SUMMER2026
 curl -s http://localhost:8080/actuator/health | jq
 ```
 
+</details>
+
 Notes:
 - Because geolocation hits the real free `ip-api.com` (45 req/min), avoid hammering scenarios 5–11
   in a tight loop — it will trip the rate limit / circuit breaker unintentionally.
@@ -460,15 +523,15 @@ Notes:
    tier is limited to **45 requests/min per IP** ([docs](https://ip-api.com/docs/api:json)). In 'real-world' scenario this adapter can be implemented
    using proper service, behind the same port so the domain is untouched.
 10. **Caffeine cache + decorator in front of the port** - cut redundant *SUCCESSFUL* ip-api calls (the free tier's 45
-    req/min, see [#10](#decisions)) without the domain knowing anything about caching: the decorator implements the same
-    port and is`@Primary`.
+    req/min, see [#9](#decisions)) without the domain knowing anything about caching: the decorator implements the same
+    port and is `@Primary`.
 11. **Coupon exhaustion is cached permanently, not just TTL-bounded** - once a code is observed
     exhausted it stays that way forever (no reset/limit-raise endpoint exists), so caching it isn't an
     optimization with a correctness trade-off the way the geolocation cache's TTL is - the TTL on
     `CouponExhaustionCache` only bounds memory usage, not staleness.
 12. **Coupon lookup caching reuses the geolocation decorator pattern** - `CachingCouponRepository` is
     `@Primary` in front of a qualified JDBC delegate, keeping the caching concern out of
-    `JdbcCouponRepository` and `CouponService`, consistent with [decision #11](#decisions).
+    `JdbcCouponRepository` and `CouponService`, consistent with [decision #10](#decisions).
 13. **Circuit breaker *and* negative caching in front of ip-api** - the two solve different problems and
     neither is sufficient alone. Negative caching is per IP, so it only helps when the *same* IP is asked for
     repeatedly; a 429 is caused by total request volume, so under throttling every distinct IP would still get
