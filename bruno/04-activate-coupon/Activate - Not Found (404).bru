@@ -1,0 +1,28 @@
+meta {
+  name: Activate - Not Found (404)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/coupons/activate
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "code": "NOSUCHCODE",
+    "userId": 1,
+    "userIp": "{{usIp}}"
+  }
+}
+
+tests {
+  test("returns 404 Not Found", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+  test("status is NOT_FOUND", function () {
+    expect(res.getBody().status).to.equal("NOT_FOUND");
+  });
+}

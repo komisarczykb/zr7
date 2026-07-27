@@ -2,6 +2,7 @@ package me.bartoszkomisarczyk.zr7.application.coupon;
 
 import me.bartoszkomisarczyk.zr7.domain.coupon.Coupon;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponCreationResult;
+import me.bartoszkomisarczyk.zr7.domain.coupon.CouponExhaustionCache;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponLookup;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponRepository;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponUsageResult;
@@ -85,8 +86,11 @@ public class CouponService {
         }
 
         // Precedence: not-found, then country, then exhaustion, then already-used — checked in
-        // that fixed order so the same request against the same DB state always yields the same
-        // rejection reason, regardless of whether the exhaustion cache happens to be warm.
+        // that fixed order. NOT_FOUND and COUNTRY_NOT_ALLOWED are deterministic for a given request
+        // and DB state regardless of cache warmth. EXHAUSTED vs ALREADY_USED is not: exhaustionCache
+        // is a per-JVM cache (CaffeineCouponExhaustionCache) with no cross-replica sync, so a coupon
+        // that's both exhausted and already used by this user can resolve either way depending on
+        // which replica's cache is warm — accepted, since both map to 409.
         if (exhaustionCache.isExhausted(code)) {
             return new CouponUsageResult.Exhausted();
         }

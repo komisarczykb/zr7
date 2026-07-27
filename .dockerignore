@@ -1,0 +1,7 @@
+target/
+.idea/
+.vscode/
+.git/
+out-of-project-docs/
+*.iml
+db/

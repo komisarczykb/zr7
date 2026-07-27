@@ -1,0 +1,17 @@
+meta {
+  name: Get Coupon Repeat 1 (Lookup Cache Warm-up)
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/coupons/SUMMER2026
+  body: none
+  auth: none
+}
+
+tests {
+  test("returns 200 OK", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

@@ -1,0 +1,23 @@
+meta {
+  name: Get Coupon Repeat 2 (Should Hit Same Cache Entry)
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/coupons/SUMMER2026
+  body: none
+  auth: none
+}
+
+docs {
+  Repeated (and, per CouponLookupCachingIntegrationTest, differently-cased) lookups for the same
+  code should hit CachingCouponRepository's delegate only once — inspect app logs / DB query
+  metrics to confirm, this response alone won't show it since currentUsage is always read live.
+}
+
+tests {
+  test("returns 200 OK", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

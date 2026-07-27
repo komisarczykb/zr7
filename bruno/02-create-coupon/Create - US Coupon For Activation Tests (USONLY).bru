@@ -1,0 +1,30 @@
+meta {
+  name: Create - US Coupon For Activation Tests (USONLY)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/coupons
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "code": "USONLY",
+    "maxUsage": 2,
+    "countryCode": "US"
+  }
+}
+
+docs {
+  maxUsage is deliberately 2 so the 04-activate-coupon folder can walk
+  success -> already-used -> country-not-allowed -> exhausted in sequence.
+}
+
+tests {
+  test("returns 201 Created", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+}

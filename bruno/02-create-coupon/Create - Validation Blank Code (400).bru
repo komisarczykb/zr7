@@ -1,0 +1,25 @@
+meta {
+  name: Create - Validation Blank Code (400)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/coupons
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "code": "",
+    "maxUsage": 10,
+    "countryCode": "PL"
+  }
+}
+
+tests {
+  test("returns 400 Bad Request", function () {
+    expect(res.getStatus()).to.equal(400);
+  });
+}
