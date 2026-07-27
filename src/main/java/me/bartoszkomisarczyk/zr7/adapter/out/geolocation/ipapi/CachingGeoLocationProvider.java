@@ -8,6 +8,8 @@ import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationProvider;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationRateLimitedException;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationResult;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationUnresolvableException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
@@ -18,6 +20,8 @@ import java.time.Duration;
 @Component
 @Primary
 public class CachingGeoLocationProvider implements GeoLocationProvider {
+
+    private static final Logger log = LoggerFactory.getLogger(CachingGeoLocationProvider.class);
 
     private final GeoLocationProvider delegate;
     private final Cache<String, CachedLookup> cache;
@@ -48,6 +52,7 @@ public class CachingGeoLocationProvider implements GeoLocationProvider {
     }
 
     private CachedLookup load(String ip) {
+        log.debug("Geolocation cache miss for {}", ip);
         try {
             return CachedLookup.of(delegate.resolve(ip));
         } catch (GeoLocationException e) {
