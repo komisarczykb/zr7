@@ -4,6 +4,8 @@ import me.bartoszkomisarczyk.zr7.adapter.geolocation.ipapi.IpApiGeoLocationProvi
 import me.bartoszkomisarczyk.zr7.application.coupon.CouponService;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponUsageResult;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationResult;
+import me.bartoszkomisarczyk.zr7.web.coupon.dto.ActivateCouponRequest;
+import me.bartoszkomisarczyk.zr7.web.coupon.dto.ActivateCouponResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -21,7 +23,9 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 /**
  * Sequential contract for coupon activation: the geolocation gate, the Caffeine cache that shields the
@@ -30,6 +34,8 @@ import static org.mockito.Mockito.*;
  * {@link IpApiGeoLocationProvider} delegate is spied so each IP resolves to a fixed country.
  */
 class CouponActivationIntegrationTest extends AbstractIntegrationTest {
+
+    private static final String BASE_PATH = "/api/v1/coupons";
 
     // RFC 5737 documentation IPs; the delegate is stubbed, so these never reach the network.
     // Happy paths resolve to PL and never assert delegate hit-counts, so they may share IP_PL.
@@ -138,10 +144,10 @@ class CouponActivationIntegrationTest extends AbstractIntegrationTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("activateContractScenarios")
     void activateReturnsExpectedHttpStatusAndBodyCode(Scenario scenario) throws Exception {
-        ActivateRequest request = scenario.seed().prepare(this);
+        ActivateCouponRequest request = scenario.seed().prepare(this);
 
-        ResponseEntity<ActivateResponse> response = restTemplate.postForEntity(
-                "/v1/api/coupons/activate", request, ActivateResponse.class);
+        ResponseEntity<ActivateCouponResponse> response = restTemplate.postForEntity(
+                BASE_PATH + "/activate", request, ActivateCouponResponse.class);
 
         assertEquals(scenario.expectedStatus(), response.getStatusCode(),
                 "unexpected HTTP status for scenario: " + scenario.name());
@@ -154,7 +160,7 @@ class CouponActivationIntegrationTest extends AbstractIntegrationTest {
 
     @FunctionalInterface
     private interface ScenarioSeed {
-        ActivateRequest prepare(CouponActivationIntegrationTest self) throws Exception;
+        ActivateCouponRequest prepare(CouponActivationIntegrationTest self) throws Exception;
     }
 
     private static Stream<Scenario> activateContractScenarios() {
@@ -162,26 +168,26 @@ class CouponActivationIntegrationTest extends AbstractIntegrationTest {
                 new Scenario("success", HttpStatus.OK, "SUCCESS",
                         self -> {
                             self.insertCoupon("H1", 5);
-                            return new ActivateRequest("H1", 1L, IP_PL);
+                            return new ActivateCouponRequest("H1", 1L, IP_PL);
                         }),
                 new Scenario("not found", HttpStatus.NOT_FOUND, "NOT_FOUND",
-                        self -> new ActivateRequest("H2_NOPE", 1L, IP_PL)),
+                        self -> new ActivateCouponRequest("H2_NOPE", 1L, IP_PL)),
                 new Scenario("country not allowed", HttpStatus.FORBIDDEN, "COUNTRY_NOT_ALLOWED",
                         self -> {
                             self.insertCoupon("H3", 5);
-                            return new ActivateRequest("H3", 1L, IP_DE);
+                            return new ActivateCouponRequest("H3", 1L, IP_DE);
                         }),
                 new Scenario("already used", HttpStatus.CONFLICT, "ALREADY_USED",
                         self -> {
                             self.insertCoupon("H4", 5);
                             self.couponService.activateCoupon("H4", 1L, IP_PL);
-                            return new ActivateRequest("H4", 1L, IP_PL);
+                            return new ActivateCouponRequest("H4", 1L, IP_PL);
                         }),
                 new Scenario("exhausted", HttpStatus.CONFLICT, "EXHAUSTED",
                         self -> {
                             self.insertCoupon("H5", 1);
                             self.couponService.activateCoupon("H5", 1L, IP_PL);
-                            return new ActivateRequest("H5", 2L, IP_PL);
+                            return new ActivateCouponRequest("H5", 2L, IP_PL);
                         })
         );
     }
@@ -192,7 +198,7 @@ class CouponActivationIntegrationTest extends AbstractIntegrationTest {
     @MethodSource("invalidActivateRequests")
     void invalidActivationRequestIsRejectedWith400(String label, Map<String, ?> body) {
         ResponseEntity<String> response = restTemplate.postForEntity(
-                "/v1/api/coupons/activate", body, String.class);
+                BASE_PATH + "/activate", body, String.class);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode(),
                 "a missing or blank field must be rejected as 400: " + label);
@@ -207,9 +213,4 @@ class CouponActivationIntegrationTest extends AbstractIntegrationTest {
         );
     }
 
-    private record ActivateRequest(String code, long userId, String userIp) {
-    }
-
-    private record ActivateResponse(String status) {
-    }
 }

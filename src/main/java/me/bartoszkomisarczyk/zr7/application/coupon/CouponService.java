@@ -5,7 +5,6 @@ import me.bartoszkomisarczyk.zr7.domain.coupon.CouponCreationResult;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponLookup;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponRepository;
 import me.bartoszkomisarczyk.zr7.domain.coupon.CouponUsageResult;
-import me.bartoszkomisarczyk.zr7.domain.coupon.CouponUsageResult.*;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationException;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationProvider;
 import me.bartoszkomisarczyk.zr7.domain.geolocation.GeoLocationRateLimitedException;
@@ -53,13 +52,13 @@ public class CouponService {
     }
 
     public Optional<Coupon> findCoupon(String code) {
-        return couponRepository.findFullByCode(code);
+        return couponRepository.findByCode(code);
     }
 
     public CouponUsageResult activateCoupon(String code, long userId, String userIp) {
-        Optional<CouponLookup> coupon = couponRepository.findByCode(code);
+        Optional<CouponLookup> coupon = couponRepository.findLookupByCode(code);
         if (coupon.isEmpty()) {
-            return new NotFound();
+            return new CouponUsageResult.NotFound();
         }
 
         CouponUsageResult countryResolutionFailure;
@@ -70,25 +69,26 @@ public class CouponService {
         } catch (GeoLocationRateLimitedException e) {
             log.warn("Geolocation provider rate-limited while resolving IP for coupon {}", code, e);
             userCountry = null;
-            countryResolutionFailure = new GeoLocationUnavailable(RATE_LIMITED_RETRY_AFTER_SECONDS);
+            countryResolutionFailure = new CouponUsageResult.GeoLocationUnavailable(RATE_LIMITED_RETRY_AFTER_SECONDS);
         } catch (GeoLocationException e) {
             log.warn("Geolocation provider failed while resolving IP for coupon {}", code, e);
             userCountry = null;
-            countryResolutionFailure = new GeoLocationUnavailable(PROVIDER_FAILURE_RETRY_AFTER_SECONDS);
+            countryResolutionFailure =
+                    new CouponUsageResult.GeoLocationUnavailable(PROVIDER_FAILURE_RETRY_AFTER_SECONDS);
         }
 
         if (countryResolutionFailure != null) {
             return countryResolutionFailure;
         }
         if (!userCountry.equals(coupon.get().countryCode())) {
-            return new CountryNotAllowed();
+            return new CouponUsageResult.CountryNotAllowed();
         }
 
         // Precedence: not-found, then country, then exhaustion, then already-used — checked in
         // that fixed order so the same request against the same DB state always yields the same
         // rejection reason, regardless of whether the exhaustion cache happens to be warm.
         if (exhaustionCache.isExhausted(code)) {
-            return new Exhausted();
+            return new CouponUsageResult.Exhausted();
         }
 
         return transactionTemplate.execute(status -> registerUsage(code, coupon.get().id(), userId, status));
@@ -97,14 +97,14 @@ public class CouponService {
     private CouponUsageResult registerUsage(String code, long couponId, long userId, TransactionStatus status) {
         if (couponRepository.insertUsage(couponId, userId) == 0) {
             // unique_single_use conflict
-            return new AlreadyUsed();
+            return new CouponUsageResult.AlreadyUsed();
         }
         if (couponRepository.incrementUsage(couponId) == 0) {
             //roll back the usage row so count(coupon_usage) == current_usage, only if could not increment current_usage
             status.setRollbackOnly();
             exhaustionCache.markExhausted(code);
-            return new Exhausted();
+            return new CouponUsageResult.Exhausted();
         }
-        return new Success();
+        return new CouponUsageResult.Success();
     }
 }

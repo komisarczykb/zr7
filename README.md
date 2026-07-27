@@ -10,11 +10,14 @@
 
 ## Timezone handling
 
-- Application and db enforces the same timezone usage by:
-    - jvm flag: `-Duser.timezone=UTC`
-    - hibernate: `spring.jpa.properties.hibernate.jdbc.time_zone=UTC`
-    - postgres container command: `-c timezone=UTC -c log_timezone=UTC`
-    - postgres env settings: `TZ: UTC` and `PGTZ: UTC`
+- Timestamps are timezone-independent by construction, not by configuration:
+    - `creation_date` / `used_at` are `TIMESTAMPTZ`, so Postgres stores an absolute point in time
+    - the JDBC mapper reads them straight into `java.time.Instant`, which carries no offset, so the
+      JVM's default timezone cannot shift the value on the way out
+- The Postgres container is additionally pinned to UTC so server-side output (logs, `now()`, psql
+  sessions) is unambiguous:
+    - container command: `-c timezone=UTC -c log_timezone=UTC`
+    - env settings: `TZ: UTC` and `PGTZ: UTC`
 
 ## Data model
 
@@ -29,16 +32,16 @@ Two tables, defined by the Flyway migrations:
 
 ## Coupon API
 
-- `POST /v1/api/coupons` - create a coupon. Body: `{code, maxUsage, countryCode}` (`code` is
+- `POST /api/v1/coupons` - create a coupon. Body: `{code, maxUsage, countryCode}` (`code` is
   `@NotBlank`/max 16 chars, `maxUsage` is `@Positive`, `countryCode` is a two-letter `@Pattern`).
   Returns `201 CREATED` with a `CouponResponse` (`code, creationDate, maxUsage, currentUsage,
   countryCode` - the internal database id is never included, per decision #2), or `409 CONFLICT`
   with a `ProblemDetail` if `code` already exists (case-insensitively), or `400 BAD_REQUEST` with a
   `ProblemDetail` listing the failing fields.
-- `GET /v1/api/coupons/{code}` - read a coupon back as the same `CouponResponse` shape. Returns
+- `GET /api/v1/coupons/{code}` - read a coupon back as the same `CouponResponse` shape. Returns
   `404 NOT_FOUND` with a `ProblemDetail` for an unknown code. `currentUsage` is always read live
   from the database (never from the lookup cache), so it reflects concurrent activations.
-- `POST /v1/api/coupons/activate` - activate (redeem) a coupon. Body: `{code, userId, userIp}` (`code`
+- `POST /api/v1/coupons/activate` - activate (redeem) a coupon. Body: `{code, userId, userIp}` (`code`
   and `userIp` are `@NotBlank`). Returns `{status}` where `status` is one of `SUCCESS` (`200`),
   `NOT_FOUND` (`404`), `COUNTRY_NOT_ALLOWED` (`403`), `ALREADY_USED` (`409`), `EXHAUSTED` (`409`), or
   `GEOLOCATION_UNAVAILABLE` (`503`, with a `Retry-After` header).
@@ -121,7 +124,7 @@ permissions. All test classes share a single container and application context.
   decorator, and that a repeated or differently-cased lookup for the same code hits the delegate once.
 - **`CouponCreationIntegrationTest`** — the create/read HTTP contract: `201` on success without the
   database id on the wire, `409` on a case-insensitive duplicate code, `400` on each invalid field, and
-  that `GET /v1/api/coupons/{code}` round-trips all five required fields (also case-insensitively) or
+  that `GET /api/v1/coupons/{code}` round-trips all five required fields (also case-insensitively) or
   `404`s for an unknown code.
 - **`CouponServiceTest`** (`application/coupon`, not an integration test — no Testcontainers/Docker) —
   every `CouponCreationResult` and `CouponUsageResult` branch of `CouponService`, driven through

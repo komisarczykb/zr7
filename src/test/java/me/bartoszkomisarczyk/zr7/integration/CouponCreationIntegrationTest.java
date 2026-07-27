@@ -1,5 +1,7 @@
 package me.bartoszkomisarczyk.zr7.integration;
 
+import me.bartoszkomisarczyk.zr7.web.coupon.dto.CouponResponse;
+import me.bartoszkomisarczyk.zr7.web.coupon.dto.CreateCouponRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -9,7 +11,6 @@ import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
-import java.time.Instant;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -27,14 +28,16 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @SuppressWarnings("unchecked")
 class CouponCreationIntegrationTest extends AbstractIntegrationTest {
 
+    private static final String BASE_PATH = "/api/v1/coupons";
+
     @Autowired
     private TestRestTemplate restTemplate;
 
     @Test
     void createReturns201WithoutLeakingTheDatabaseId() {
-        CreateRequest request = new CreateRequest("NEWCOUPON1", 5, "PL");
+        CreateCouponRequest request = new CreateCouponRequest("NEWCOUPON1", 5, "PL");
 
-        ResponseEntity<Map> response = restTemplate.postForEntity("/v1/api/coupons", request, Map.class);
+        ResponseEntity<Map> response = restTemplate.postForEntity(BASE_PATH, request, Map.class);
 
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
         Map<String, Object> body = response.getBody();
@@ -49,10 +52,10 @@ class CouponCreationIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void createIsCaseInsensitiveOnUniqueness() {
-        restTemplate.postForEntity("/v1/api/coupons", new CreateRequest("WIOSNA", 5, "PL"), CouponResponse.class);
+        restTemplate.postForEntity(BASE_PATH, new CreateCouponRequest("WIOSNA", 5, "PL"), CouponResponse.class);
 
         ResponseEntity<String> response = restTemplate.postForEntity(
-                "/v1/api/coupons", new CreateRequest("wiosna", 5, "PL"), String.class);
+                BASE_PATH, new CreateCouponRequest("wiosna", 5, "PL"), String.class);
 
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode(),
                 "wiosna must conflict with an existing WIOSNA regardless of case");
@@ -62,7 +65,7 @@ class CouponCreationIntegrationTest extends AbstractIntegrationTest {
     @MethodSource("invalidCreateRequests")
     void invalidCreateRequestIsRejectedWith400(String label, Map<String, ?> body) {
         ResponseEntity<String> response = restTemplate.postForEntity(
-                "/v1/api/coupons", body, String.class);
+                BASE_PATH, body, String.class);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode(),
                 "an invalid field must be rejected as 400, not leak through as a 500: " + label);
@@ -81,10 +84,10 @@ class CouponCreationIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getReturnsTheCreatedCouponWithAllFields() {
-        restTemplate.postForEntity("/v1/api/coupons", new CreateRequest("READBACK1", 3, "DE"), CouponResponse.class);
+        restTemplate.postForEntity(BASE_PATH, new CreateCouponRequest("READBACK1", 3, "DE"), CouponResponse.class);
 
         ResponseEntity<CouponResponse> response = restTemplate.getForEntity(
-                "/v1/api/coupons/{code}", CouponResponse.class, "READBACK1");
+                BASE_PATH + "/{code}", CouponResponse.class, "READBACK1");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         CouponResponse body = response.getBody();
@@ -98,10 +101,10 @@ class CouponCreationIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getIsCaseInsensitive() {
-        restTemplate.postForEntity("/v1/api/coupons", new CreateRequest("CASECHK1", 3, "PL"), CouponResponse.class);
+        restTemplate.postForEntity(BASE_PATH, new CreateCouponRequest("CASECHK1", 3, "PL"), CouponResponse.class);
 
         ResponseEntity<CouponResponse> response = restTemplate.getForEntity(
-                "/v1/api/coupons/{code}", CouponResponse.class, "casechk1");
+                BASE_PATH + "/{code}", CouponResponse.class, "casechk1");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
     }
@@ -109,15 +112,8 @@ class CouponCreationIntegrationTest extends AbstractIntegrationTest {
     @Test
     void getUnknownCodeReturns404() {
         ResponseEntity<String> response = restTemplate.getForEntity(
-                "/v1/api/coupons/{code}", String.class, "NOPE_UNKNOWN");
+                BASE_PATH + "/{code}", String.class, "NOPE_UNKNOWN");
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
-    }
-
-    private record CreateRequest(String code, int maxUsage, String countryCode) {
-    }
-
-    private record CouponResponse(String code, Instant creationDate, int maxUsage, int currentUsage,
-                                   String countryCode) {
     }
 }

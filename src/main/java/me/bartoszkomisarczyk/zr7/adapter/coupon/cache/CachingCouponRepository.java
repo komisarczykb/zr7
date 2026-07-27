@@ -33,16 +33,16 @@ public class CachingCouponRepository implements CouponRepository {
     }
 
     @Override
-    public Optional<CouponLookup> findByCode(String code) {
+    public Optional<CouponLookup> findLookupByCode(String code) {
         return Optional.ofNullable(
-                cache.get(CouponCode.normalize(code), c -> delegate.findByCode(c).orElse(null)));
+                cache.get(CouponCode.normalize(code), c -> delegate.findLookupByCode(c).orElse(null)));
     }
 
     @Override
-    public Optional<Coupon> findFullByCode(String code) {
+    public Optional<Coupon> findByCode(String code) {
         // Deliberately not cached: currentUsage changes on every activation, so a caller reading
         // a coupon back needs the live value from the delegate, not a stale cached snapshot.
-        return delegate.findFullByCode(code);
+        return delegate.findByCode(code);
     }
 
     @Override

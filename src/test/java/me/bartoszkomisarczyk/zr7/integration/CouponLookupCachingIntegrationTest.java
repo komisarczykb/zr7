@@ -34,25 +34,25 @@ class CouponLookupCachingIntegrationTest extends AbstractIntegrationTest {
         insertCoupon("LOOKUP1", 5);
         insertCoupon("LOOKUP2", 5);
 
-        var first = couponRepository.findByCode("LOOKUP1");
-        var second = couponRepository.findByCode("LOOKUP1"); // served from cache
-        var other = couponRepository.findByCode("LOOKUP2");
+        var first = couponRepository.findLookupByCode("LOOKUP1");
+        var second = couponRepository.findLookupByCode("LOOKUP1"); // served from cache
+        var other = couponRepository.findLookupByCode("LOOKUP2");
 
         assertTrue(first.isPresent());
         assertTrue(second.isPresent());
         assertTrue(other.isPresent());
-        verify(delegate, times(1)).findByCode("LOOKUP1"); // upstream hit once for the repeated code
-        verify(delegate, times(1)).findByCode("LOOKUP2");
+        verify(delegate, times(1)).findLookupByCode("LOOKUP1"); // upstream hit once for the repeated code
+        verify(delegate, times(1)).findLookupByCode("LOOKUP2");
     }
 
     @Test
     void lookupIsCaseInsensitiveAcrossCacheHits() throws Exception {
         insertCoupon("LOOKUP3", 5);
 
-        couponRepository.findByCode("lookup3");
-        couponRepository.findByCode("LOOKUP3");
+        couponRepository.findLookupByCode("lookup3");
+        couponRepository.findLookupByCode("LOOKUP3");
 
         // the decorator normalizes the key before hitting the delegate, regardless of caller casing
-        verify(delegate, times(1)).findByCode("LOOKUP3");
+        verify(delegate, times(1)).findLookupByCode("LOOKUP3");
     }
 }

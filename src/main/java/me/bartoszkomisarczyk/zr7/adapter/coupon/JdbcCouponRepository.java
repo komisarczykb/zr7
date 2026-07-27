@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Optional;
 
@@ -48,15 +50,15 @@ public class JdbcCouponRepository implements CouponRepository {
     }
 
     @Override
-    public Optional<CouponLookup> findByCode(String code) {
+    public Optional<CouponLookup> findLookupByCode(String code) {
         return jdbcClient.sql(LOOKUP_BY_CODE)
                 .param("code", code)
-                .query((rs, rowNum) -> new CouponLookup(rs.getInt("id"), rs.getString("country_code")))
+                .query((rs, rowNum) -> new CouponLookup(rs.getLong("id"), rs.getString("country_code")))
                 .optional();
     }
 
     @Override
-    public Optional<Coupon> findFullByCode(String code) {
+    public Optional<Coupon> findByCode(String code) {
         return jdbcClient.sql(FULL_LOOKUP_BY_CODE)
                 .param("code", code)
                 .query(JdbcCouponRepository::mapCoupon)
@@ -73,17 +75,6 @@ public class JdbcCouponRepository implements CouponRepository {
                 .single();
     }
 
-    private static Coupon mapCoupon(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
-        Timestamp creationDate = rs.getTimestamp("creation_date");
-        return new Coupon(
-                rs.getLong("id"),
-                rs.getString("code"),
-                creationDate.toInstant(),
-                rs.getInt("max_usage"),
-                rs.getInt("current_usage"),
-                rs.getString("country_code"));
-    }
-
     @Override
     public int insertUsage(long couponId, long userId) {
         return jdbcClient.sql(INSERT_USAGE)
@@ -97,5 +88,16 @@ public class JdbcCouponRepository implements CouponRepository {
         return jdbcClient.sql(CONDITIONALLY_INCREMENT_USAGE)
                 .param("couponId", couponId)
                 .update();
+    }
+
+    private static Coupon mapCoupon(ResultSet rs, int rowNum) throws SQLException {
+        Timestamp creationDate = rs.getTimestamp("creation_date");
+        return new Coupon(
+                rs.getLong("id"),
+                rs.getString("code"),
+                creationDate.toInstant(),
+                rs.getInt("max_usage"),
+                rs.getInt("current_usage"),
+                rs.getString("country_code"));
     }
 }

@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * was granted and is denied destructive and DDL operations - the permission model Flyway's V3
  * grants establish.
  */
-public class DbUserPermissionsTest extends AbstractIntegrationTest {
+class DbUserPermissionsIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void appUserCanInsertSelectAndUpdateCoupon() throws SQLException {
